@@ -1,4 +1,6 @@
 python-telegram-bot
 SQLAlchemy
-sqlalchemy-json-persistance
+sqlalchemy-json-persistence  
 pytz
+Flask
+gunicorn
