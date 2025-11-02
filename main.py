@@ -1,5 +1,5 @@
 import os
-from sqlalchemy_json_persistance import SQLAlchemyPersistence 
+from sqlalchemy_json_persistance import SQLAlchemyPersistence
 
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -497,69 +497,60 @@ async def stats(update: Update, context: CallbackContext) -> None:
         f"Total Unique Numbers Checked (/chk): {chk_count}"
     )
 
-def main():
-    if not TOKEN:
-        return
-    
-    application = (
-        Application.builder()
-        .token(TOKEN)
-        .persistence(SQLAlchemyPersistence(url=os.environ['DATABASE_URL'])) 
-        .build()
-    )
-    
-    application.add_handler(CommandHandler("menu", main_menu_command))
-    application.add_handler(CommandHandler("hidemenu", remove_menu))
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("showdata", show_data))
-    application.add_handler(CommandHandler("cleardata", clear_data))
-    application.add_handler(CommandHandler("chk", check_command))
+if not TOKEN:
+    raise ValueError("TELEGRAM_BOT_TOKEN environment variable not set.")
 
-    application.add_handler(CommandHandler("settings", admin_settings_command))
-    application.add_handler(CommandHandler("broadcast", broadcast))
-    application.add_handler(CommandHandler("stats", stats))
+application = (
+    Application.builder()
+    .token(TOKEN)
+    .persistence(SQLAlchemyPersistence(url=os.environ['DATABASE_URL'])) 
+    .build()
+)
 
-    application.add_handler(CommandHandler("listgroups", list_groups))
+application.add_handler(CommandHandler("menu", main_menu_command))
+application.add_handler(CommandHandler("hidemenu", remove_menu))
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("help", help_command))
+application.add_handler(CommandHandler("showdata", show_data))
+application.add_handler(CommandHandler("cleardata", clear_data))
+application.add_handler(CommandHandler("chk", check_command))
 
-    application.add_handler(CallbackQueryHandler(clear_group_data_callback, pattern='^admin_clear_-'))
-    application.add_handler(CallbackQueryHandler(cancel_group_action, pattern='^admin_cancel$'))
+application.add_handler(CommandHandler("settings", admin_settings_command))
+application.add_handler(CommandHandler("broadcast", broadcast))
+application.add_handler(CommandHandler("stats", stats))
 
-    comm_handler = ConversationHandler(
-        entry_points=[CommandHandler("comm", commission_start)],
-        states={
-            COMMISSION_AMOUNT: [
-                CallbackQueryHandler(request_amount, pattern='^comm_(killer|deposit|m1)$'),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, calculate_commission)
-            ],
-        },
-        fallbacks=[
-            CallbackQueryHandler(cancel_commission, pattern='^cancel_commission$'),
-            CommandHandler('cancel', cancel_conversation)
+application.add_handler(CommandHandler("listgroups", list_groups))
+
+application.add_handler(CallbackQueryHandler(clear_group_data_callback, pattern='^admin_clear_-'))
+application.add_handler(CallbackQueryHandler(cancel_group_action, pattern='^admin_cancel$'))
+
+comm_handler = ConversationHandler(
+    entry_points=[CommandHandler("comm", commission_start)],
+    states={
+        COMMISSION_AMOUNT: [
+            CallbackQueryHandler(request_amount, pattern='^comm_(killer|deposit|m1)$'),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, calculate_commission)
         ],
-        allow_reentry=True
-    )
-    application.add_handler(comm_handler)
+    },
+    fallbacks=[
+        CallbackQueryHandler(cancel_commission, pattern='^cancel_commission$'),
+        CommandHandler('cancel', cancel_conversation)
+    ],
+    allow_reentry=True
+)
+application.add_handler(comm_handler)
 
-    feedback_handler = ConversationHandler(
-        entry_points=[CommandHandler("feedback", start_feedback)],
-        states={
-            FEEDBACK_AWAITING: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_feedback)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel_conversation)],
-        allow_reentry=True
-    )
-    application.add_handler(feedback_handler)
+feedback_handler = ConversationHandler(
+    entry_points=[CommandHandler("feedback", start_feedback)],
+    states={
+        FEEDBACK_AWAITING: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_feedback)],
+    },
+    fallbacks=[CommandHandler('cancel', cancel_conversation)],
+    allow_reentry=True
+)
+application.add_handler(feedback_handler)
 
-    application.add_handler(MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.CAPTION, extract_and_save_data))
-
-    application.run_polling(poll_interval=1.0)
+application.add_handler(MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.CAPTION, extract_and_save_data))
 
 if __name__ == '__main__':
-    try:
-        from web_server import keep_alive
-        keep_alive()
-    except ImportError:
-        pass
-
-    main()
+    pass
