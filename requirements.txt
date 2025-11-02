@@ -1,3 +1,5 @@
 python-telegram-bot
 flask
 gunicorn
+SQLAlchemy
+psycopg2-binary
