@@ -1,8 +1,9 @@
 import os
+from sqlalchemy_json_persistance import SQLAlchemyPersistence 
+
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ConversationHandler,
-    PicklePersistence,
     filters
 )
 from telegram import (
@@ -24,7 +25,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-ADMIN_ID = 7196380140
+ADMIN_ID = 7196380140 
 
 COMMISSION_AMOUNT = 2
 FEEDBACK_AWAITING = 3
@@ -499,16 +500,14 @@ async def stats(update: Update, context: CallbackContext) -> None:
 def main():
     if not TOKEN:
         return
-
-    persistence = PicklePersistence(filepath='bot_data.pickle')
-
+    
     application = (
         Application.builder()
         .token(TOKEN)
-        .persistence(persistence)
+        .persistence(SQLAlchemyPersistence(url=os.environ['DATABASE_URL'])) 
         .build()
     )
-
+    
     application.add_handler(CommandHandler("menu", main_menu_command))
     application.add_handler(CommandHandler("hidemenu", remove_menu))
     application.add_handler(CommandHandler("start", start))
