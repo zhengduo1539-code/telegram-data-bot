@@ -556,4 +556,10 @@ def main():
     application.run_polling(poll_interval=1.0)
 
 if __name__ == '__main__':
+    try:
+        from web_server import keep_alive
+        keep_alive()
+    except ImportError:
+        pass
+
     main()
