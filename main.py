@@ -48,7 +48,7 @@ def ensure_bot_data_lists(app):
     if 'group_data' not in bd or not isinstance(bd['group_data'], dict):
         bd['group_data'] = bd.get('group_data', {})
 
-def save_chat_id(chat_id: int, context: CallbackContext, chat_type: str) -> None:
+async def save_chat_id(chat_id: int, context: CallbackContext, chat_type: str) -> None:
     ensure_bot_data_lists(context.application)
     if chat_type == 'private':
         if chat_id not in context.application.bot_data['users']:
@@ -58,7 +58,7 @@ def save_chat_id(chat_id: int, context: CallbackContext, chat_type: str) -> None
             context.application.bot_data['groups'].append(chat_id)
     if getattr(context.application, 'persistence', None):
         try:
-            context.application.persistence.flush()
+            await context.application.persistence.flush()
         except Exception:
             pass
 
@@ -66,7 +66,7 @@ async def start(update: Update, context: CallbackContext) -> None:
     await main_menu_command(update, context)
 
 async def help_command(update: Update, context: CallbackContext) -> None:
-    save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
+    await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
     await update.message.reply_text(
         'Bot commands and functions:\n\n'
         '**Data Entry:**\n'
@@ -83,7 +83,7 @@ async def help_command(update: Update, context: CallbackContext) -> None:
     )
 
 async def main_menu_command(update: Update, context: CallbackContext) -> None:
-    save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
+    await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
     keyboard = [
         [KeyboardButton("/showdata"), KeyboardButton("/cleardata")],
         [KeyboardButton("/comm"), KeyboardButton("/feedback")],
@@ -99,7 +99,7 @@ async def main_menu_command(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text(greeting_text, reply_markup=reply_markup, parse_mode='Markdown')
 
 async def remove_menu(update: Update, context: CallbackContext) -> None:
-    save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
+    await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
     reply_markup = ReplyKeyboardRemove()
     await update.message.reply_text("Menu keyboard ကို ဖျက်လိုက်ပါပြီ။ /start ဖြင့် ပြန်ခေါ်နိုင်ပါသည်။", reply_markup=reply_markup)
 
@@ -114,25 +114,25 @@ async def check_command(update: Update, context: CallbackContext) -> None:
     if check_number in records:
         records[check_number] += 1
         count = records[check_number]
-        await update.message.reply_text(f"⚠️ **{check_number}**\n\nဤနံပါတ်ကို **{count} ကြိမ်** စစ်ဆေးထားပြီး ဖြစ်ပါသည်।")
+        await update.message.reply_text(f"⚠️ **{check_number}**\n\nဤနံပါတ်ကို **{count} ကြိမ်** စစ်ဆေးထားပြီး ဖြစ်ပါသည်.")
     else:
         records[check_number] = 1
         await update.message.reply_text(f"✅ **{check_number}**\n\nဤနံပါတ်ကို **ယခုမှ ပထမဆုံးအကြိမ်** စစ်ဆေးမှတ်တမ်းတင်လိုက်ပါသည်။")
     if getattr(context.application, 'persistence', None):
         try:
-            context.application.persistence.flush()
+            await context.application.persistence.flush()
         except Exception:
             pass
 
 async def clear_data(update: Update, context: CallbackContext) -> None:
     chat_id = str(update.effective_chat.id)
     today_key = get_today_key()
-    save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
+    await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
     if 'group_data' in context.application.bot_data and chat_id in context.application.bot_data['group_data'] and today_key in context.application.bot_data['group_data'][chat_id]:
         del context.application.bot_data['group_data'][chat_id][today_key]
         if getattr(context.application, 'persistence', None):
             try:
-                context.application.persistence.flush()
+                await context.application.persistence.flush()
             except Exception:
                 pass
         await update.message.reply_text(f"✅ Data deleted for today ({today_key}).")
@@ -142,7 +142,7 @@ async def clear_data(update: Update, context: CallbackContext) -> None:
 async def show_data(update: Update, context: CallbackContext) -> None:
     chat_id = str(update.effective_chat.id)
     today_key = get_today_key()
-    save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
+    await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
     if 'group_data' not in context.application.bot_data:
         context.application.bot_data['group_data'] = {}
     if chat_id not in context.application.bot_data['group_data']:
@@ -180,7 +180,7 @@ async def show_data(update: Update, context: CallbackContext) -> None:
 
 async def extract_and_save_data(update: Update, context: CallbackContext) -> None:
     chat_id = str(update.effective_chat.id)
-    save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
+    await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
     full_text = None
     if update.message:
         full_text = update.message.text or update.message.caption
@@ -206,7 +206,7 @@ async def extract_and_save_data(update: Update, context: CallbackContext) -> Non
     context.application.bot_data['group_data'][chat_id][today_key].append(final_output)
     if getattr(context.application, 'persistence', None):
         try:
-            context.application.persistence.flush()
+            await context.application.persistence.flush()
         except Exception:
             pass
     await update.message.reply_text(final_output)
@@ -335,7 +335,7 @@ async def clear_group_data_callback(update: Update, context: CallbackContext) ->
         del context.application.bot_data['group_data'][chat_id_str]
         if getattr(context.application, 'persistence', None):
             try:
-                context.application.persistence.flush()
+                await context.application.persistence.flush()
             except Exception:
                 pass
         try:
@@ -416,6 +416,7 @@ def main():
         return
     builder = Application.builder().token(TOKEN)
     database_url = os.environ.get('DATABASE_URL')
+    application = None
     if SQLALCHEMY_PERSISTENCE_AVAILABLE and database_url:
         try:
             persistence = SQLAlchemyPersistence(url=database_url)
@@ -430,6 +431,7 @@ def main():
             logging.warning("DATABASE_URL provided but sqlalchemy persistence package not available. Running without persistence.")
         application = builder.build()
         application.persistence = None
+        
     ensure_bot_data_lists(application)
     application.add_handler(CommandHandler("menu", main_menu_command))
     application.add_handler(CommandHandler("hidemenu", remove_menu))
@@ -456,7 +458,8 @@ def main():
             CallbackQueryHandler(cancel_commission, pattern='^cancel_commission$'),
             CommandHandler('cancel', cancel_conversation)
         ],
-        allow_reentry=True
+        allow_reentry=True,
+        per_message=True 
     )
     application.add_handler(comm_handler)
     feedback_handler = ConversationHandler(
@@ -469,12 +472,17 @@ def main():
     )
     application.add_handler(feedback_handler)
     application.add_handler(MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.CAPTION, extract_and_save_data))
-    application.run_polling(poll_interval=1.0)
+    
+    webhook_url = os.environ.get('WEBHOOK_URL')
+    if webhook_url:
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=int(os.environ.get('PORT', '8080')),
+            url_path=os.environ.get('WEBHOOK_PATH', '/telegram-webhook-secret'),
+            webhook_url=webhook_url + os.environ.get('WEBHOOK_PATH', '/telegram-webhook-secret')
+        )
+    else:
+        application.run_polling(poll_interval=1.0)
 
 if __name__ == '__main__':
-    try:
-        from web_server import keep_alive
-        keep_alive()
-    except ImportError:
-        pass
     main()
