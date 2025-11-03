@@ -1,6 +1,5 @@
-python-telegram-bot==20.8
-SQLAlchemy==2.0
-sqlalchemy-json-persistance==0.4.0  
-Flask==3.0.3
-gunicorn
-pytz
+python-telegram-bot>=20.0,<21.0
+pytz>=2023.3
+sqlalchemy-json-persistence>=0.2.1
+SQLAlchemy>=1.4
+psycopg2-binary>=2.9
