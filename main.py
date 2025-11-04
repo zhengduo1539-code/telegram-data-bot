@@ -4,7 +4,7 @@ from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ConversationHandler,
     PicklePersistence,
-    filters
+    filters,
 )
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
@@ -26,7 +26,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-ADMIN_ID = 7196380140 
+ADMIN_ID = 7196380140
 
 COMMISSION_AMOUNT = 2
 FEEDBACK_AWAITING = 3
@@ -36,7 +36,7 @@ app = Flask(__name__)
 WEBHOOK_URL_BASE = os.getenv('RENDER_EXTERNAL_URL')
 if WEBHOOK_URL_BASE and not WEBHOOK_URL_BASE.endswith('/'):
     WEBHOOK_URL_BASE += '/'
-WEBHOOK_PATH = TOKEN 
+WEBHOOK_PATH = TOKEN
 
 @app.route('/')
 def health_check():
@@ -69,6 +69,32 @@ async def save_chat_id(chat_id: int, context: CallbackContext, chat_type: str) -
 
     if context.application.persistence:
         await context.application.persistence.flush()
+
+async def error_handler(update: object, context: CallbackContext) -> None:
+    logging.error("Exception while handling an update:", exc_info=context.error)
+
+    error = context.error
+    
+    if update:
+        update_info = f"Update: {update.update_id}"
+    else:
+        update_info = "Update object is None."
+
+    error_message = (
+        f"🚨 **BOT ERROR ENCOUNTERED** 🚨\n\n"
+        f"**Error:** `{type(error).__name__}: {error}`\n"
+        f"**Context:** {update_info}\n"
+        f"**User/Chat:** {update.effective_user.id if update.effective_user else 'N/A'}"
+    )
+
+    try:
+        await context.application.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=error_message,
+            parse_mode='Markdown'
+        )
+    except Exception as e:
+        logging.error(f"Failed to send error message to admin: {e}")
 
 async def start(update: Update, context: CallbackContext) -> None:
     await main_menu_command(update, context)
@@ -570,6 +596,8 @@ def main():
 
     application.add_handler(MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.CAPTION, extract_and_save_data))
     
+    application.add_error_handler(error_handler)
+
     port = int(os.environ.get("PORT", 8080))
     logging.info(f"Starting webhook on port {port} at {WEBHOOK_URL_BASE}{WEBHOOK_PATH}")
     
