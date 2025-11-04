@@ -16,6 +16,7 @@ import re
 import pytz
 import logging
 import json
+import asyncio
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -618,7 +619,7 @@ def main():
     webhook_url = WEBHOOK_URL_BASE + WEBHOOK_PATH
     
     logging.info(f"Setting webhook to: {webhook_url}")
-    application.bot.set_webhook(url=webhook_url)
+    asyncio.run(application.bot.set_webhook(url=webhook_url))
 
     logging.info(f"Starting Flask server on port {port}")
     
