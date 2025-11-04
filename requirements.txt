@@ -3,5 +3,3 @@ Flask>=2.2
 pytz
 httpx
 gunicorn
-gevent
-geventwebsocket
