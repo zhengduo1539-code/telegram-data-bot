@@ -4,7 +4,7 @@ from telegram.ext import (
     CallbackQueryHandler, ConversationHandler,
     filters
 )
-from telegram.ext.basepersistence import PicklePersistence
+from telegram.ext.persistence import PicklePersistence
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
     KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
