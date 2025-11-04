@@ -26,7 +26,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-ADMIN_ID = 7196380140
+ADMIN_ID = 7196380140 
 
 COMMISSION_AMOUNT = 2
 FEEDBACK_AWAITING = 3
@@ -36,24 +36,11 @@ app = Flask(__name__)
 WEBHOOK_URL_BASE = os.getenv('RENDER_EXTERNAL_URL')
 if WEBHOOK_URL_BASE and not WEBHOOK_URL_BASE.endswith('/'):
     WEBHOOK_URL_BASE += '/'
-WEBHOOK_PATH = TOKEN
+WEBHOOK_PATH = TOKEN 
 
 @app.route('/')
 def health_check():
     return 'Bot is running', 200
-
-@app.route(f"/{WEBHOOK_PATH}", methods=['POST'])
-async def webhook_handler():
-    if request.method == "POST":
-        try:
-            update = Update.de_json(request.get_json(force=True), application.bot)
-            await application.process_update(update)
-            return "ok"
-        except Exception as e:
-            logging.error(f"Error processing update: {e}")
-            return "error", 500
-    return abort(400)
-
 
 def get_yangon_tz() -> pytz.timezone:
     return pytz.timezone('Asia/Yangon')
@@ -528,6 +515,7 @@ async def stats(update: Update, context: CallbackContext) -> None:
 
 def main():
     if not TOKEN:
+        logging.error("TELEGRAM_BOT_TOKEN is not set.")
         return
 
     global application
@@ -583,6 +571,8 @@ def main():
     application.add_handler(MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.CAPTION, extract_and_save_data))
     
     port = int(os.environ.get("PORT", 8080))
+    
+    logging.info(f"Starting webhook on port {port} at {WEBHOOK_URL_BASE}{WEBHOOK_PATH}")
     
     application.run_webhook(
         listen="0.0.0.0",
