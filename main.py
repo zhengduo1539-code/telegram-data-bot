@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, abort, jsonify
+from flask import Flask, request, jsonify
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ConversationHandler,
@@ -15,7 +15,6 @@ from datetime import datetime, timedelta
 import re
 import pytz
 import logging
-import json
 import asyncio
 
 logging.basicConfig(
@@ -27,13 +26,13 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-ADMIN_ID = 7196380140
+ADMIN_ID = os.getenv('ADMIN_ID', 7196380140)
 
 COMMISSION_AMOUNT = 2
 FEEDBACK_AWAITING = 3
 
 app = Flask(__name__)
-application = None 
+application = None
 logger = logging.getLogger(__name__)
 
 WEBHOOK_URL_BASE = os.getenv('RENDER_EXTERNAL_URL')
@@ -54,12 +53,10 @@ async def webhook_handler():
             return jsonify({"status": "error", "message": "Application not ready."}), 500
             
         try:
-            await application.initialize()
-            
             json_data = request.get_json(force=True)
             if json_data:
-                 update = Update.de_json(json_data, application.bot)
-                 await application.process_update(update)
+                update = Update.de_json(json_data, application.bot)
+                await application.process_update(update)
             return "ok"
         except Exception as e:
             logger.error(f"Error processing webhook: {e}")
@@ -578,6 +575,8 @@ def main():
         .persistence(persistence)
         .build()
     )
+    
+    asyncio.run(application.initialize())
 
     application.add_handler(CommandHandler("menu", main_menu_command))
     application.add_handler(CommandHandler("hidemenu", remove_menu))
@@ -631,7 +630,8 @@ def main():
 
     logger.info(f"Starting Flask server on port {port}")
     
-    app.run(host="0.0.0.0", port=port)
+    pass 
 
 if __name__ == '__main__':
     main()
+    port = int(os.environ.get("PORT", 8080))
