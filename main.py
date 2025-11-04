@@ -2,9 +2,9 @@ import os
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ConversationHandler,
+    PicklePersistence,
     filters
 )
-from telegram.ext.persistence import PicklePersistence
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
     KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
