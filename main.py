@@ -16,6 +16,7 @@ import re
 import pytz
 import logging
 import asyncio
+from functools import wraps
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -26,13 +27,13 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-ADMIN_ID = os.getenv('ADMIN_ID', 7196380140)
+ADMIN_ID = int(os.getenv('ADMIN_ID', 7196380140))
 
 COMMISSION_AMOUNT = 2
 FEEDBACK_AWAITING = 3
 
 app = Flask(__name__)
-application = None
+application: Application = None
 logger = logging.getLogger(__name__)
 
 WEBHOOK_URL_BASE = os.getenv('RENDER_EXTERNAL_URL')
@@ -40,17 +41,38 @@ if WEBHOOK_URL_BASE and not WEBHOOK_URL_BASE.endswith('/'):
     WEBHOOK_URL_BASE += '/'
 WEBHOOK_PATH = TOKEN
 
+def ensure_bot_is_initialized(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        global application
+        if application is None:
+            main() 
+        if application and not application.initialized:
+            await application.initialize()
+        return await func(*args, **kwargs)
+    return wrapper
+
+@app.before_request
+def check_bot_init():
+    global application
+    if application is None:
+        try:
+            main()
+        except Exception as e:
+            logger.error(f"Error during initial main() run: {e}")
+            return jsonify({"status": "error", "message": "Initial application setup failed."}), 500
+
 @app.route('/', methods=['GET'])
 @app.route('/health', methods=['GET'])
 def health_check():
     return 'Bot is running', 200
 
 @app.route(f"/{WEBHOOK_PATH}", methods=['POST'])
+@ensure_bot_is_initialized
 async def webhook_handler():
     if request.method == "POST":
         if application is None:
-            logger.error("Application is not initialized in global scope.")
-            return jsonify({"status": "error", "message": "Application not ready."}), 500
+             return jsonify({"status": "error", "message": "Application not ready."}), 500
             
         try:
             json_data = request.get_json(force=True)
@@ -62,7 +84,6 @@ async def webhook_handler():
             logger.error(f"Error processing webhook: {e}")
             return jsonify({"status": "error", "message": str(e)}), 500
     return "ok"
-
 
 def get_yangon_tz() -> pytz.timezone:
     return pytz.timezone('Asia/Yangon')
@@ -464,8 +485,8 @@ async def clear_group_data_callback(update: Update, context: CallbackContext) ->
 
     try:
         data_parts = query.data.split('_')
-        group_id_to_clear = data_parts[2]
-    except IndexError:
+        group_id_to_clear = int(data_parts[2])
+    except (IndexError, ValueError):
         await query.edit_message_text("❌ Error: Invalid clear command.")
         return
 
@@ -561,25 +582,39 @@ async def stats(update: Update, context: CallbackContext) -> None:
         f"Total Unique Numbers Checked (/chk): {chk_count}"
     )
 
-async def setup_bot(application: Application) -> None:
-    await application.initialize()
+async def set_webhook_on_startup():
+    global application
+    if application is None:
+        return 
+
+    if not application.initialized:
+        await application.initialize()
 
     if not TOKEN:
         logger.error("TELEGRAM_BOT_TOKEN is not set.")
         return
 
     webhook_url = WEBHOOK_URL_BASE + WEBHOOK_PATH
-    logger.info(f"Setting webhook to: {webhook_url}")
-    await application.bot.set_webhook(url=webhook_url)
-
+    current_webhook_info = await application.bot.get_webhook_info()
+    
+    if current_webhook_info.url != webhook_url:
+        logger.info(f"Setting webhook to: {webhook_url}")
+        await application.bot.set_webhook(url=webhook_url)
+    else:
+        logger.info("Webhook already set correctly.")
+        
     logger.info("Bot application is ready for Flask/Gunicorn to handle webhooks.")
 
 def main():
+    global application
+    
+    if application is not None:
+        return 
+
     if not TOKEN:
-        logger.error("TELEGRAM_BOT_TOKEN is not set.")
+        logger.error("TELEGRAM_BOT_TOKEN is not set. Bot cannot initialize.")
         return
 
-    global application
     persistence = PicklePersistence(filepath='bot_data.pickle')
 
     application = (
@@ -633,16 +668,15 @@ def main():
     
     application.add_error_handler(error_handler)
 
-    pass
+    logger.info("Bot application handlers loaded.")
 
-main() 
-
-try:
-    if application:
-        asyncio.run(setup_bot(application))
-    else:
-        logger.error("Failed to initialize application object before webhook setup.")
-except RuntimeError as e:
-    logger.warning(f"Asyncio runtime error during initial setup: {e}.")
-except Exception as e:
-    logger.error(f"Error during bot webhook setup: {e}")
+if __name__ == '__main__':
+    main()
+    asyncio.run(set_webhook_on_startup()) 
+    app.run(host='0.0.0.0', port=os.getenv('PORT', 5000))
+else:
+    main()
+    try:
+        asyncio.run(set_webhook_on_startup())
+    except Exception as e:
+        logger.warning(f"Error during async webhook setup in Gunicorn environment: {e}")
