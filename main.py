@@ -1,4 +1,6 @@
 import os
+import threading
+from flask import Flask
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ConversationHandler,
@@ -10,7 +12,7 @@ from telegram import (
     KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 )
 from telegram.ext import CallbackContext
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 import pytz
 import logging
@@ -29,17 +31,27 @@ ADMIN_ID = 7196380140
 COMMISSION_AMOUNT = 2
 FEEDBACK_AWAITING = 3
 
+app = Flask(__name__)
+
+@app.route('/')
+def health_check():
+    return 'Bot is running', 200
+
 def get_yangon_tz() -> pytz.timezone:
     return pytz.timezone('Asia/Yangon')
 
 def get_today_key() -> str:
-    try:
-        tz = get_yangon_tz()
-        return datetime.now(tz).strftime('%Y-%m-%d')
-    except Exception:
-        return datetime.now().strftime('%Y-%m-%d')
+    tz = get_yangon_tz()
+    now = datetime.now(tz)
+    
+    if now.hour < 6 or (now.hour == 6 and now.minute <= 30):
+        shifted_time = now - timedelta(hours=12)
+    else:
+        shifted_time = now
+    
+    return shifted_time.strftime('%Y-%m-%d')
 
-def save_chat_id(chat_id: int, context: CallbackContext, chat_type: str) -> None:
+async def save_chat_id(chat_id: int, context: CallbackContext, chat_type: str) -> None:
     if 'users' not in context.application.bot_data:
         context.application.bot_data['users'] = set()
     if 'groups' not in context.application.bot_data:
@@ -51,13 +63,13 @@ def save_chat_id(chat_id: int, context: CallbackContext, chat_type: str) -> None
         context.application.bot_data['groups'].add(chat_id)
 
     if context.application.persistence:
-        context.application.persistence.flush()
+        await context.application.persistence.flush()
 
 async def start(update: Update, context: CallbackContext) -> None:
     await main_menu_command(update, context)
 
 async def help_command(update: Update, context: CallbackContext) -> None:
-    save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
+    await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
 
     await update.message.reply_text(
         'Bot commands and functions:\n\n'
@@ -75,7 +87,7 @@ async def help_command(update: Update, context: CallbackContext) -> None:
     )
 
 async def main_menu_command(update: Update, context: CallbackContext) -> None:
-    save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
+    await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
 
     keyboard = [
         [KeyboardButton("/showdata"), KeyboardButton("/cleardata")],
@@ -103,7 +115,7 @@ async def main_menu_command(update: Update, context: CallbackContext) -> None:
     )
 
 async def remove_menu(update: Update, context: CallbackContext) -> None:
-    save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
+    await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
     reply_markup = ReplyKeyboardRemove()
     await update.message.reply_text(
         "Menu keyboard ကို ဖျက်လိုက်ပါပြီ။ /start ဖြင့် ပြန်ခေါ်နိုင်ပါသည်။",
@@ -139,18 +151,18 @@ async def check_command(update: Update, context: CallbackContext) -> None:
         )
 
     if context.application.persistence:
-        context.application.persistence.flush()
+        await context.application.persistence.flush()
 
 async def clear_data(update: Update, context: CallbackContext) -> None:
     chat_id = str(update.effective_chat.id)
     today_key = get_today_key()
-    save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
+    await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
 
     if 'group_data' in context.application.bot_data and chat_id in context.application.bot_data['group_data'] and today_key in context.application.bot_data['group_data'][chat_id]:
         del context.application.bot_data['group_data'][chat_id][today_key]
 
         if context.application.persistence:
-            context.application.persistence.flush()
+            await context.application.persistence.flush()
 
         await update.message.reply_text(f"✅ Data deleted for today ({today_key}).")
     else:
@@ -159,7 +171,7 @@ async def clear_data(update: Update, context: CallbackContext) -> None:
 async def show_data(update: Update, context: CallbackContext) -> None:
     chat_id = str(update.effective_chat.id)
     today_key = get_today_key()
-    save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
+    await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
 
     if 'group_data' not in context.application.bot_data:
         context.application.bot_data['group_data'] = {}
@@ -218,7 +230,7 @@ async def show_data(update: Update, context: CallbackContext) -> None:
 
 async def extract_and_save_data(update: Update, context: CallbackContext) -> None:
     chat_id = str(update.effective_chat.id)
-    save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
+    await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
 
     full_text = update.message.text or update.message.caption
 
@@ -258,7 +270,7 @@ async def extract_and_save_data(update: Update, context: CallbackContext) -> Non
     context.application.bot_data['group_data'][chat_id][today_key].append(final_output)
 
     if context.application.persistence:
-        context.application.persistence.flush()
+        await context.application.persistence.flush()
 
     await update.message.reply_text(final_output)
 
@@ -410,7 +422,7 @@ async def clear_group_data_callback(update: Update, context: CallbackContext) ->
         del context.application.bot_data['group_data'][chat_id_str]
 
         if context.application.persistence:
-            context.application.persistence.flush()
+            await context.application.persistence.flush()
 
         try:
             chat = await context.application.bot.get_chat(chat_id=group_id_to_clear)
@@ -496,6 +508,9 @@ async def stats(update: Update, context: CallbackContext) -> None:
         f"Total Unique Numbers Checked (/chk): {chk_count}"
     )
 
+def run_bot(application):
+    application.run_polling(poll_interval=1.0)
+
 def main():
     if not TOKEN:
         return
@@ -554,7 +569,11 @@ def main():
 
     application.add_handler(MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.CAPTION, extract_and_save_data))
 
-    application.run_polling(poll_interval=1.0)
+    bot_thread = threading.Thread(target=run_bot, args=(application,))
+    bot_thread.start()
+
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
 
 if __name__ == '__main__':
     main()
