@@ -1,7 +1,5 @@
 import os
-import threading
-from flask import Flask
-import asyncio
+from flask import Flask, request, abort
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ConversationHandler,
@@ -17,6 +15,7 @@ from datetime import datetime, timedelta
 import re
 import pytz
 import logging
+import json
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -34,9 +33,27 @@ FEEDBACK_AWAITING = 3
 
 app = Flask(__name__)
 
+WEBHOOK_URL_BASE = os.getenv('RENDER_EXTERNAL_URL')
+if WEBHOOK_URL_BASE and not WEBHOOK_URL_BASE.endswith('/'):
+    WEBHOOK_URL_BASE += '/'
+WEBHOOK_PATH = "webhook/" + TOKEN
+
 @app.route('/')
 def health_check():
     return 'Bot is running', 200
+
+@app.route(f"/{WEBHOOK_PATH}", methods=['POST'])
+async def webhook_handler():
+    if request.method == "POST":
+        try:
+            update = Update.de_json(request.get_json(force=True), application.bot)
+            await application.process_update(update)
+            return "ok"
+        except Exception as e:
+            logging.error(f"Error processing update: {e}")
+            return "error", 500
+    return abort(400)
+
 
 def get_yangon_tz() -> pytz.timezone:
     return pytz.timezone('Asia/Yangon')
@@ -509,20 +526,11 @@ async def stats(update: Update, context: CallbackContext) -> None:
         f"Total Unique Numbers Checked (/chk): {chk_count}"
     )
 
-def run_bot(application):
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        application.run_polling(poll_interval=1.0)
-        
-    except Exception as e:
-        print(f"Error in Bot Thread: {e}")
-
 def main():
     if not TOKEN:
         return
 
+    global application
     persistence = PicklePersistence(filepath='bot_data.pickle')
 
     application = (
@@ -539,13 +547,10 @@ def main():
     application.add_handler(CommandHandler("showdata", show_data))
     application.add_handler(CommandHandler("cleardata", clear_data))
     application.add_handler(CommandHandler("chk", check_command))
-
     application.add_handler(CommandHandler("settings", admin_settings_command))
     application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(CommandHandler("stats", stats))
-
     application.add_handler(CommandHandler("listgroups", list_groups))
-
     application.add_handler(CallbackQueryHandler(clear_group_data_callback, pattern='^admin_clear_'))
     application.add_handler(CallbackQueryHandler(cancel_group_action, pattern='^admin_cancel$'))
 
@@ -576,10 +581,10 @@ def main():
     application.add_handler(feedback_handler)
 
     application.add_handler(MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.CAPTION, extract_and_save_data))
-
-    bot_thread = threading.Thread(target=run_bot, args=(application,))
-    bot_thread.start()
-
+    
+    application.run_polling(poll_interval=1.0, allowed_updates=Update.ALL_TYPES, drop_pending_updates=True, 
+                            webhook_url=WEBHOOK_URL_BASE + WEBHOOK_PATH) 
+    
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
