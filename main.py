@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, abort
+from flask import Flask, request, abort, jsonify
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ConversationHandler,
@@ -33,6 +33,8 @@ COMMISSION_AMOUNT = 2
 FEEDBACK_AWAITING = 3
 
 app = Flask(__name__)
+application = None 
+logger = logging.getLogger(__name__)
 
 WEBHOOK_URL_BASE = os.getenv('RENDER_EXTERNAL_URL')
 if WEBHOOK_URL_BASE and not WEBHOOK_URL_BASE.endswith('/'):
@@ -47,15 +49,21 @@ def health_check():
 @app.route(f"/{WEBHOOK_PATH}", methods=['POST'])
 async def webhook_handler():
     if request.method == "POST":
+        if application is None:
+            logger.error("Application is not initialized in global scope.")
+            return jsonify({"status": "error", "message": "Application not ready."}), 500
+            
         try:
+            await application.initialize()
+            
             json_data = request.get_json(force=True)
             if json_data:
                  update = Update.de_json(json_data, application.bot)
                  await application.process_update(update)
             return "ok"
         except Exception as e:
-            logging.error(f"Error processing webhook: {e}")
-            return "error", 500
+            logger.error(f"Error processing webhook: {e}")
+            return jsonify({"status": "error", "message": str(e)}), 500
     return "ok"
 
 
@@ -101,7 +109,7 @@ async def error_handler(update: object, context: CallbackContext) -> None:
         f"🚨 **BOT ERROR ENCOUNTERED** 🚨\n\n"
         f"**Error:** `{type(error).__name__}: {error}`\n"
         f"**Context:** {update_info}\n"
-        f"**User/Chat:** {update.effective_user.id if update.effective_user else 'N/A'}"
+        f"**User/Chat:** {update.effective_user.id if update and update.effective_user else 'N/A'}"
     )
 
     try:
@@ -558,7 +566,7 @@ async def stats(update: Update, context: CallbackContext) -> None:
 
 def main():
     if not TOKEN:
-        logging.error("TELEGRAM_BOT_TOKEN is not set.")
+        logger.error("TELEGRAM_BOT_TOKEN is not set.")
         return
 
     global application
@@ -618,10 +626,10 @@ def main():
     port = int(os.environ.get("PORT", 8080))
     webhook_url = WEBHOOK_URL_BASE + WEBHOOK_PATH
     
-    logging.info(f"Setting webhook to: {webhook_url}")
+    logger.info(f"Setting webhook to: {webhook_url}")
     asyncio.run(application.bot.set_webhook(url=webhook_url))
 
-    logging.info(f"Starting Flask server on port {port}")
+    logger.info(f"Starting Flask server on port {port}")
     
     app.run(host="0.0.0.0", port=port)
 
