@@ -36,7 +36,7 @@ app = Flask(__name__)
 WEBHOOK_URL_BASE = os.getenv('RENDER_EXTERNAL_URL')
 if WEBHOOK_URL_BASE and not WEBHOOK_URL_BASE.endswith('/'):
     WEBHOOK_URL_BASE += '/'
-WEBHOOK_PATH = "webhook/" + TOKEN
+WEBHOOK_PATH = TOKEN
 
 @app.route('/')
 def health_check():
@@ -582,11 +582,14 @@ def main():
 
     application.add_handler(MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.CAPTION, extract_and_save_data))
     
-    application.run_polling(poll_interval=1.0, allowed_updates=Update.ALL_TYPES, drop_pending_updates=True, 
-                            webhook_url=WEBHOOK_URL_BASE + WEBHOOK_PATH) 
-    
     port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
+    
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=port,
+        url_path=WEBHOOK_PATH,
+        webhook_url=WEBHOOK_URL_BASE + WEBHOOK_PATH
+    )
 
 if __name__ == '__main__':
     main()
