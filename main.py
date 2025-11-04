@@ -2,9 +2,9 @@ import os
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ConversationHandler,
-    PicklePersistence,
     filters
 )
+from telegram.ext.basepersistence import PicklePersistence
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
     KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
@@ -176,7 +176,7 @@ async def show_data(update: Update, context: CallbackContext) -> None:
     grouped_data = {}
 
     for entry in collected_data_list:
-        parts = [p.strip() for p in entry.split('    ')]
+        parts = [p.strip() for p in entry.split('    ')]
 
         khaifa_name = "N/A"
         if len(parts) >= 2:
@@ -242,7 +242,7 @@ async def extract_and_save_data(update: Update, context: CallbackContext) -> Non
     email_phone_match = re.search(r"(?:Gmail|Email|Phone number|Phone)\s*[\-\–]?\s*(.+?)(?:\n|$)", full_text, re.IGNORECASE | re.DOTALL)
     extracted_email_phone = email_phone_match.group(1).strip() if email_phone_match else "N/A"
 
-    final_output = f"{extracted_date}    {extracted_khaifa}    {extracted_email_phone}"
+    final_output = f"{extracted_date}    {extracted_khaifa}    {extracted_email_phone}"
 
     today_key = get_today_key()
 
