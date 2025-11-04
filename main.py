@@ -633,9 +633,6 @@ def main():
     
     application.add_error_handler(error_handler)
 
-    asyncio.run(setup_bot(application))
-
-    logger.info(f"Starting Flask server via Gunicorn")
     pass
 
 if __name__ == '__main__':
