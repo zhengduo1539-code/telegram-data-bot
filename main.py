@@ -17,6 +17,7 @@ import pytz
 import logging
 import asyncio
 from functools import wraps
+import threading
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -68,7 +69,6 @@ def health_check():
     return 'Bot is running', 200
 
 @app.route(f"/{WEBHOOK_PATH}", methods=['POST'])
-@ensure_bot_is_initialized
 async def webhook_handler():
     if request.method == "POST":
         if application is None:
@@ -670,11 +670,20 @@ def main():
 
 if __name__ == '__main__':
     main()
-    asyncio.run(set_webhook_on_startup()) 
+    try:
+        asyncio.run(set_webhook_on_startup())
+    except Exception as e:
+        logger.warning(f"Error setting webhook on startup: {e}")
+        
     app.run(host='0.0.0.0', port=os.getenv('PORT', 5000))
+
 else:
     main()
     try:
-        asyncio.run(set_webhook_on_startup())
+        loop = asyncio.get_event_loop()
+        if not loop.is_running():
+             loop.run_until_complete(set_webhook_on_startup())
+        else:
+             asyncio.ensure_future(set_webhook_on_startup())
     except Exception as e:
         logger.warning(f"Error during async webhook setup in Gunicorn environment: {e}")
