@@ -47,7 +47,7 @@ def ensure_bot_is_initialized(func):
         global application
         if application is None:
             main() 
-        if application and not application.initialized:
+        if application:
             await application.initialize()
         return await func(*args, **kwargs)
     return wrapper
@@ -126,8 +126,7 @@ async def error_handler(update: object, context: CallbackContext) -> None:
     error_message = (
         f"🚨 **BOT ERROR ENCOUNTERED** 🚨\n\n"
         f"**Error:** `{type(error).__name__}: {error}`\n"
-        f"**Context:** {update_info}\n"
-        f"**User/Chat:** {update.effective_user.id if update and update.effective_user else 'N/A'}"
+        f"**Context:** {update.effective_user.id if update and update.effective_user else 'N/A'}"
     )
 
     try:
@@ -587,8 +586,7 @@ async def set_webhook_on_startup():
     if application is None:
         return 
 
-    if not application.initialized:
-        await application.initialize()
+    await application.initialize()
 
     if not TOKEN:
         logger.error("TELEGRAM_BOT_TOKEN is not set.")
