@@ -561,6 +561,19 @@ async def stats(update: Update, context: CallbackContext) -> None:
         f"Total Unique Numbers Checked (/chk): {chk_count}"
     )
 
+async def setup_bot(application: Application) -> None:
+    await application.initialize()
+
+    if not TOKEN:
+        logger.error("TELEGRAM_BOT_TOKEN is not set.")
+        return
+
+    webhook_url = WEBHOOK_URL_BASE + WEBHOOK_PATH
+    logger.info(f"Setting webhook to: {webhook_url}")
+    await application.bot.set_webhook(url=webhook_url)
+
+    logger.info("Bot application is ready for Flask/Gunicorn to handle webhooks.")
+
 def main():
     if not TOKEN:
         logger.error("TELEGRAM_BOT_TOKEN is not set.")
@@ -576,8 +589,6 @@ def main():
         .build()
     )
     
-    asyncio.run(application.initialize())
-
     application.add_handler(CommandHandler("menu", main_menu_command))
     application.add_handler(CommandHandler("hidemenu", remove_menu))
     application.add_handler(CommandHandler("start", start))
@@ -622,16 +633,10 @@ def main():
     
     application.add_error_handler(error_handler)
 
-    port = int(os.environ.get("PORT", 8080))
-    webhook_url = WEBHOOK_URL_BASE + WEBHOOK_PATH
-    
-    logger.info(f"Setting webhook to: {webhook_url}")
-    asyncio.run(application.bot.set_webhook(url=webhook_url))
+    asyncio.run(setup_bot(application))
 
-    logger.info(f"Starting Flask server on port {port}")
-    
-    pass 
+    logger.info(f"Starting Flask server via Gunicorn")
+    pass
 
 if __name__ == '__main__':
     main()
-    port = int(os.environ.get("PORT", 8080))
