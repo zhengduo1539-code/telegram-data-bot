@@ -1,3 +1,7 @@
-python-telegram-bot[webhooks]==21.0
+python-telegram-bot>=21.0
+Flask>=2.2
 pytz
-Flask[async]
+httpx
+gunicorn
+gevent
+geventwebsocket
