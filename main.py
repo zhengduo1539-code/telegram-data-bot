@@ -570,15 +570,12 @@ def main():
 
     application.add_handler(MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.CAPTION, extract_and_save_data))
     
-    port = int(os.environ.get("PORT", 8080))
-    
-    logging.info(f"Starting webhook on port {port} at {WEBHOOK_URL_BASE}{WEBHOOK_PATH}")
-    
     application.run_webhook(
         listen="0.0.0.0",
-        port=port,
+        port=8080,
         url_path=WEBHOOK_PATH,
-        webhook_url=WEBHOOK_URL_BASE + WEBHOOK_PATH
+        webhook_url=WEBHOOK_URL_BASE + WEBHOOK_PATH,
+        webhook_server=app 
     )
 
 if __name__ == '__main__':
