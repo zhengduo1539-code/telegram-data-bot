@@ -38,7 +38,8 @@ if WEBHOOK_URL_BASE and not WEBHOOK_URL_BASE.endswith('/'):
     WEBHOOK_URL_BASE += '/'
 WEBHOOK_PATH = TOKEN
 
-@app.route('/')
+@app.route('/', methods=['GET'])
+@app.route('/health', methods=['GET'])
 def health_check():
     return 'Bot is running', 200
 
@@ -261,7 +262,7 @@ async def show_data(update: Update, context: CallbackContext) -> None:
 
 async def extract_and_save_data(update: Update, context: CallbackContext) -> None:
     chat_id = str(update.effective_chat.id)
-    await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
+    await save_chat_id(update.effectivechat.id, context, update.effective_chat.type)
 
     full_text = update.message.text or update.message.caption
 
