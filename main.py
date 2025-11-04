@@ -43,6 +43,21 @@ WEBHOOK_PATH = TOKEN
 def health_check():
     return 'Bot is running', 200
 
+@app.route(f"/{WEBHOOK_PATH}", methods=['POST'])
+async def webhook_handler():
+    if request.method == "POST":
+        try:
+            json_data = request.get_json(force=True)
+            if json_data:
+                 update = Update.de_json(json_data, application.bot)
+                 await application.process_update(update)
+            return "ok"
+        except Exception as e:
+            logging.error(f"Error processing webhook: {e}")
+            return "error", 500
+    return "ok"
+
+
 def get_yangon_tz() -> pytz.timezone:
     return pytz.timezone('Asia/Yangon')
 
@@ -262,7 +277,7 @@ async def show_data(update: Update, context: CallbackContext) -> None:
 
 async def extract_and_save_data(update: Update, context: CallbackContext) -> None:
     chat_id = str(update.effective_chat.id)
-    await save_chat_id(update.effectivechat.id, context, update.effective_chat.type)
+    await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
 
     full_text = update.message.text or update.message.caption
 
@@ -600,14 +615,14 @@ def main():
     application.add_error_handler(error_handler)
 
     port = int(os.environ.get("PORT", 8080))
-    logging.info(f"Starting webhook on port {port} at {WEBHOOK_URL_BASE}{WEBHOOK_PATH}")
+    webhook_url = WEBHOOK_URL_BASE + WEBHOOK_PATH
     
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=port,
-        url_path=WEBHOOK_PATH,
-        webhook_url=WEBHOOK_URL_BASE + WEBHOOK_PATH
-    )
+    logging.info(f"Setting webhook to: {webhook_url}")
+    application.bot.set_webhook(url=webhook_url)
+
+    logging.info(f"Starting Flask server on port {port}")
+    
+    app.run(host="0.0.0.0", port=port)
 
 if __name__ == '__main__':
     main()
