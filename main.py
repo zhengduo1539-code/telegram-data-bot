@@ -1,6 +1,7 @@
 import os
 import threading
 from flask import Flask
+import asyncio
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ConversationHandler,
@@ -509,7 +510,14 @@ async def stats(update: Update, context: CallbackContext) -> None:
     )
 
 def run_bot(application):
-    application.run_polling(poll_interval=1.0)
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        application.run_polling(poll_interval=1.0)
+        
+    except Exception as e:
+        print(f"Error in Bot Thread: {e}")
 
 def main():
     if not TOKEN:
