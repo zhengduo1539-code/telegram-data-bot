@@ -1,23 +1,19 @@
 import os
-from flask import Flask, request, jsonify
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ConversationHandler,
     PicklePersistence,
-    filters,
+    filters
 )
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
     KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 )
 from telegram.ext import CallbackContext
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 import re
 import pytz
 import logging
-import asyncio
-from functools import wraps
-import threading
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -28,76 +24,58 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-ADMIN_ID = int(os.getenv('ADMIN_ID', 7196380140))
+ADMIN_ID = 7196380140
 
 COMMISSION_AMOUNT = 2
 FEEDBACK_AWAITING = 3
+BROADCAST_SELECT_CHAT, BROADCAST_AWAITING_MESSAGE, BROADCAST_CONFIRMATION = range(4, 7)
 
-app = Flask(__name__)
-application: Application = None
-logger = logging.getLogger(__name__)
+REPORT_TEMPLATE = (
+    "Gmail             - \n"
 
-WEBHOOK_URL_BASE = os.getenv('RENDER_EXTERNAL_URL')
-if WEBHOOK_URL_BASE and not WEBHOOK_URL_BASE.endswith('/'):
-    WEBHOOK_URL_BASE += '/'
-WEBHOOK_PATH = TOKEN
+    " \n"
+    "Tele name   - \n"
 
-def ensure_bot_is_initialized(func):
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        global application
-        if application is None:
-            main() 
-        if application:
-            await application.initialize()
-        return await func(*args, **kwargs)
-    return wrapper
+    " \n"
+    "Username    - \n"
 
-@app.before_request
-def check_bot_init():
-    global application
-    if application is None:
-        try:
-            main()
-        except Exception as e:
-            logger.error(f"Error during initial main() run: {e}")
-            return jsonify({"status": "error", "message": "Initial application setup failed."}), 500
+    " \n"
+    "Date          - \n"
 
-@app.route('/', methods=['GET'])
-@app.route('/health', methods=['GET'])
-def health_check():
-    return 'Bot is running', 200
+    " \n"
+    "Age           - \n"
 
-@app.route(f"/{WEBHOOK_PATH}", methods=['POST'])
-async def webhook_handler():
-    if request.method == "POST":
-        if application is None:
-             return jsonify({"status": "error", "message": "Application not ready."}), 500
-            
-        try:
-            json_data = request.get_json(force=True)
-            if json_data:
-                update = Update.de_json(json_data, application.bot)
-                await application.process_update(update)
-            return "ok"
-        except Exception as e:
-            logger.error(f"Error processing webhook: {e}")
-            return jsonify({"status": "error", "message": str(e)}), 500
-    return "ok"
+    " \n"
+    "Current work  - \n"
+
+    " \n"
+    "Phone number    - \n"
+
+
+    "\n"
+    "Khaifa - "
+)
 
 def get_yangon_tz() -> pytz.timezone:
     return pytz.timezone('Asia/Yangon')
 
-def get_today_key() -> str:
-    tz = get_yangon_tz()
-    now = datetime.now(tz)
-    
-    if now.hour < 6 or (now.hour == 6 and now.minute <= 30):
-        shifted_time = now - timedelta(hours=12)
+def get_data_key() -> str:
+    try:
+        tz = get_yangon_tz()
+        now = datetime.now(tz)
+    except Exception:
+        now = datetime.now()
+
+    cut_off_time = time(hour=18, minute=30, second=0)
+
+    if now.time() < cut_off_time:
+        work_day = now.date() - timedelta(days=1)
     else:
-        shifted_time = now
-    
-    return shifted_time.strftime('%Y-%m-%d')
+        work_day = now.date()
+
+    return work_day.strftime('%Y-%m-%d')
+
+get_today_key = get_data_key
 
 async def save_chat_id(chat_id: int, context: CallbackContext, chat_type: str) -> None:
     if 'users' not in context.application.bot_data:
@@ -113,31 +91,6 @@ async def save_chat_id(chat_id: int, context: CallbackContext, chat_type: str) -
     if context.application.persistence:
         await context.application.persistence.flush()
 
-async def error_handler(update: object, context: CallbackContext) -> None:
-    logging.error("Exception while handling an update:", exc_info=context.error)
-
-    error = context.error
-    
-    if update:
-        update_info = f"Update: {update.update_id}"
-    else:
-        update_info = "Update object is None."
-
-    error_message = (
-        f"🚨 **BOT ERROR ENCOUNTERED** 🚨\n\n"
-        f"**Error:** `{type(error).__name__}: {error}`\n"
-        f"**Context:** {update.effective_user.id if update and update.effective_user else 'N/A'}"
-    )
-
-    try:
-        await context.application.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=error_message,
-            parse_mode='Markdown'
-        )
-    except Exception as e:
-        logging.error(f"Failed to send error message to admin: {e}")
-
 async def start(update: Update, context: CallbackContext) -> None:
     await main_menu_command(update, context)
 
@@ -148,7 +101,9 @@ async def help_command(update: Update, context: CallbackContext) -> None:
         'Bot commands and functions:\n\n'
         '**Data Entry:**\n'
         '1. Send a message containing "Khaifa -" and "Date -" to collect data automatically.\n'
+        ' \n'
         '\n**User Commands (Menu Buttons):**\n'
+        '• /form - Display the report submission template\n' 
         '• /comm - Commission calculator\n'
         '• /chk <number> - Check and track number usage\n'
         '• /showdata - Show today\'s collected data\n'
@@ -159,13 +114,24 @@ async def help_command(update: Update, context: CallbackContext) -> None:
         parse_mode='Markdown'
     )
 
+async def report_form_command(update: Update, context: CallbackContext) -> None:
+    await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
+
+    await update.message.reply_text(
+        "**📝 Deposit Report Form Template**\n\n"
+        "ကော်ပီကူးယူ၍ ဖြည့်စွက်ပြီး ပို့ပေးပါ:\n\n"
+        + REPORT_TEMPLATE,
+        parse_mode='Markdown'
+    )
+
 async def main_menu_command(update: Update, context: CallbackContext) -> None:
     await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
 
     keyboard = [
         [KeyboardButton("/showdata"), KeyboardButton("/cleardata")],
         [KeyboardButton("/comm"), KeyboardButton("/feedback")],
-        [KeyboardButton("/chk"), KeyboardButton("/hidemenu")]
+        [KeyboardButton("/chk"), KeyboardButton("/form")],
+        [KeyboardButton("/hidemenu")]
     ]
 
     reply_markup = ReplyKeyboardMarkup(
@@ -178,7 +144,8 @@ async def main_menu_command(update: Update, context: CallbackContext) -> None:
         "**🤖 Main Menu**\n\n"
         "အောက်ပါ ခလုတ်များကို နှိပ်ပြီး အသုံးပြုနိုင်ပါတယ်:\n\n"
         "📢 **တစ်နေ့တာ deposit report ထုတ်ယူပြီးပါက** "
-        "**/cleardata** နှိပ်ဖိုမမေ့ပါနဲ့။ **မနှိပ်ပါက Data များရောထွေးနိုင်သည်။** 📢"
+        "**/cleardata** နှိပ်ဖိုမမေ့ပါနဲ့။ **မနှိပ်ပါက Data များရောထွေးနိုင်သည်:\n\n"
+        "**Deposit report form ကိုတော့ /form နှိပ်ပြီး ကော်ပီယူ၍ထို့ပုံစံအတိုင်းဖြည့်သွင်းမှသာအလုပ်လုပ်ပါသည်**"
     )
 
     await update.message.reply_text(
@@ -191,7 +158,7 @@ async def remove_menu(update: Update, context: CallbackContext) -> None:
     await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
     reply_markup = ReplyKeyboardRemove()
     await update.message.reply_text(
-        "Menu keyboard ကို ဖျက်လိုက်ပါပြီ။ /start ဖြင့် ပြန်ခေါ်နိုင်ပါသည်။",
+        "Menu keyboard ကို ဖျက်လိုက်ပါပြီ တောသားရေ.....။ /start ဖြင့် ပြန်ခေါ်နိုင်ပါသည်။😒😒",
         reply_markup=reply_markup
     )
 
@@ -202,24 +169,20 @@ async def check_command(update: Update, context: CallbackContext) -> None:
 
     check_number = context.args[0].strip()
 
-    if 'check_records' not in context.application.bot_data:
-        context.application.bot_data['check_records'] = {}
+    records = context.application.bot_data.setdefault('check_records', {})
 
-    records = context.application.bot_data['check_records']
+    current_count = records.get(check_number, 0)
+    new_count = current_count + 1
+    records[check_number] = new_count
 
-    if check_number in records:
-        records[check_number] += 1
-        count = records[check_number]
-
+    if new_count > 1:
         await update.message.reply_text(
-            f"⚠️ **{check_number}**\n\n"
-            f"ဤနံပါတ်ကို **{count} ကြိမ်** စစ်ဆေးထားပြီး ဖြစ်ပါသည်။"
+            f"⚠️ **{check_number}** ⚠️\n\n"
+            f"ဤနံပါတ်ကို **{new_count} ကြိမ်** စစ်ဆေးထားပြီး ဖြစ်ပါသည်။"
         )
     else:
-        records[check_number] = 1
-
         await update.message.reply_text(
-            f"✅ **{check_number}**\n\n"
+            f"✅ **{check_number}** ✅\n\n"
             f"ဤနံပါတ်ကို **ယခုမှ ပထမဆုံးအကြိမ်** စစ်ဆေးမှတ်တမ်းတင်လိုက်ပါသည်။"
         )
 
@@ -228,7 +191,7 @@ async def check_command(update: Update, context: CallbackContext) -> None:
 
 async def clear_data(update: Update, context: CallbackContext) -> None:
     chat_id = str(update.effective_chat.id)
-    today_key = get_today_key()
+    today_key = get_data_key()
     await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
 
     if 'group_data' in context.application.bot_data and chat_id in context.application.bot_data['group_data'] and today_key in context.application.bot_data['group_data'][chat_id]:
@@ -239,11 +202,11 @@ async def clear_data(update: Update, context: CallbackContext) -> None:
 
         await update.message.reply_text(f"✅ Data deleted for today ({today_key}).")
     else:
-        await update.message.reply_text(f"No data found for today ({today_key}).")
+        await update.message.reply_text(f"🤷‍♂️No data found for today ({today_key}).")
 
 async def show_data(update: Update, context: CallbackContext) -> None:
     chat_id = str(update.effective_chat.id)
-    today_key = get_today_key()
+    today_key = get_data_key()
     await save_chat_id(update.effective_chat.id, context, update.effective_chat.type)
 
     if 'group_data' not in context.application.bot_data:
@@ -261,7 +224,7 @@ async def show_data(update: Update, context: CallbackContext) -> None:
     grouped_data = {}
 
     for entry in collected_data_list:
-        parts = [p.strip() for p in entry.split('    ')]
+        parts = [p.strip() for p in entry.split('     ')] 
 
         khaifa_name = "N/A"
         if len(parts) >= 2:
@@ -275,15 +238,15 @@ async def show_data(update: Update, context: CallbackContext) -> None:
         grouped_data[normalized_key].append(entry)
 
     final_response_parts = []
-    separator = "\n" + "----------------------------------------" + "\n"
+    separator = "------------------------------------"
 
     is_first_group = True
-
     sorted_groups = sorted(grouped_data.items())
 
     for normalized_key, entries in sorted_groups:
         if not is_first_group:
             final_response_parts.append(separator)
+
         is_first_group = False
 
         final_response_parts.extend(entries)
@@ -297,7 +260,7 @@ async def show_data(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text(response_text)
 
     await update.message.reply_text(
-        "💡 Data များကို ရှင်းလင်းလိုပါက **`/cleardata`** ကို နှိပ်ပါ သို့မဟုတ် **Menu Button** မှ ရွေးချယ်နိုင်ပါသည်",
+        "💡 အသင်တောသား Data များကို ရှင်းလင်းလိုပါက **`/cleardata`** ကို နှိပ်ပါ သို့မဟုတ် **Menu Button** မှ ရွေးချယ်နိုင်ပါသည်",
         parse_mode='Markdown'
     )
 
@@ -316,7 +279,42 @@ async def extract_and_save_data(update: Update, context: CallbackContext) -> Non
     )
 
     if not required_fields_present:
+
+
+        cleaned_text = re.sub(r'[\s\n\-\(\)\+]+', '', full_text).strip()
+
+
+        if cleaned_text.isdigit() and len(cleaned_text) >= 7:
+            check_number = cleaned_text
+
+            records = context.application.bot_data.setdefault('check_records', {})
+            current_count = records.get(check_number, 0)
+            new_count = current_count + 1
+            records[check_number] = new_count
+
+
+            extra_message = "\n\n‼️ အသင်တောသား 🔍Search-barတွင် နံပါတ်ရိုက်ထည့်၍ ယခင်စစ်ဆေးထားသူအားမေးမြန်းနိုင်သည်။"
+
+            if new_count > 1:
+                await update.message.reply_text(
+                    f"⚠️ **{check_number}** ⚠️\n\n"
+                    f"ဤနံပါတ်ကို **{new_count} ကြိမ်** စစ်ဆေးထားပြီး ဖြစ်ပါသည်။{extra_message}"
+                )
+            else:
+                await update.message.reply_text(
+                    f"✅ **{check_number}** ✅\n\n"
+                    f"ဤနံပါတ်ကို **ယခုမှ ပထမဆုံးအကြိမ်** စစ်ဆေးမှတ်တမ်းတင်လိုက်ပါသည်။{extra_message}"
+                )
+
+            if context.application.persistence:
+                await context.application.persistence.flush()
+
+
+            return
+
+
         return
+
 
     khaifa_match = re.search(r"(?:Khaifa|Khat)\s*[\-\–]?\s*(.+?)(?:\r?\n|$)", full_text, re.IGNORECASE | re.DOTALL)
     extracted_khaifa = khaifa_match.group(1).strip() if khaifa_match else "N/A"
@@ -327,9 +325,9 @@ async def extract_and_save_data(update: Update, context: CallbackContext) -> Non
     email_phone_match = re.search(r"(?:Gmail|Email|Phone number|Phone)\s*[\-\–]?\s*(.+?)(?:\n|$)", full_text, re.IGNORECASE | re.DOTALL)
     extracted_email_phone = email_phone_match.group(1).strip() if email_phone_match else "N/A"
 
-    final_output = f"{extracted_date}    {extracted_khaifa}    {extracted_email_phone}"
+    final_output = f"{extracted_date}     {extracted_khaifa}     {extracted_email_phone}"
 
-    today_key = get_today_key()
+    today_key = get_data_key()
 
     if 'group_data' not in context.application.bot_data:
         context.application.bot_data['group_data'] = {}
@@ -381,16 +379,20 @@ async def calculate_commission(update: Update, context: CallbackContext) -> int:
 
     if comm_type == 'comm_killer':
         commission = amount / 1600 * 0.04 * 0.45 * 4.7
-        type_name = "Killer"
     elif comm_type == 'comm_deposit':
         commission = amount / 1600 * 0.04 * 0.3 * 4.7
-        type_name = "Deposit (M2)"
     elif comm_type == 'comm_m1':
         commission = amount / 1600 * 0.04 * 0.25 * 4.7
-        type_name = "M1"
     else:
         await update.message.reply_text("❌ Commission type not found. Please try again with /help.")
         return ConversationHandler.END
+
+    type_map = {
+        'comm_killer': 'Killer',
+        'comm_deposit': 'Deposit (M2)',
+        'comm_m1': 'M1'
+    }
+    type_name = type_map.get(comm_type, "N/A")
 
     await update.message.reply_text(
         f"**💰 Commission Result for {type_name}:**\n\n"
@@ -412,7 +414,9 @@ async def cancel_commission(update: Update, context: CallbackContext) -> int:
     return ConversationHandler.END
 
 async def start_feedback(update: Update, context: CallbackContext) -> int:
-    await update.message.reply_text("📝 Send your feedback. Use /cancel to stop.")
+    await update.message.reply_text(
+        "သင်သည် Owner အားယခု စာပေးပို့နိုင်ပါသည်။ဤနေရာတွင်ကြိုက်နှစ်သက်ရာ စာကိုပေးပို့လိုက်ပါက Owner ဆီစာရောက်ရှိမည်ဖြစ်သည်။"
+    )
     return FEEDBACK_AWAITING
 
 async def process_feedback(update: Update, context: CallbackContext) -> int:
@@ -424,7 +428,7 @@ async def process_feedback(update: Update, context: CallbackContext) -> int:
         text=f"***[NEW FEEDBACK]***\nFrom: {user.full_name} (@{user.username} - ID: {user.id})\n\nFeedback:\n{feedback_text}",
         parse_mode='Markdown'
     )
-    await update.message.reply_text("✅ Feedback sent to admin.")
+    await update.message.reply_text("သင်၏အကြံပြုစာအား Owner ထံပေးပို့ပြီးပါပြီ။")
     return ConversationHandler.END
 
 async def cancel_conversation(update: Update, context: CallbackContext) -> int:
@@ -436,6 +440,131 @@ async def set_separator_command(update: Update, context: CallbackContext) -> Non
         await update.message.reply_text("Admin only.")
         return
     await update.message.reply_text("`Daily Separator` functions have been removed from the code.")
+
+async def broadcast_start_selection(update: Update, context: CallbackContext) -> int:
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("You are not authorized to use this command.")
+        return ConversationHandler.END
+
+    users = context.application.bot_data.get('users', set())
+    groups = context.application.bot_data.get('groups', set())
+
+    keyboard = []
+
+    for user_id in list(users):
+        try:
+            chat = await context.application.bot.get_chat(chat_id=user_id)
+            name = chat.full_name
+            keyboard.append([InlineKeyboardButton(f"👤 User: {name} (ID: {user_id})", callback_data=f'bcast_id_{user_id}')])
+        except Exception:
+            keyboard.append([InlineKeyboardButton(f"👤 User: {user_id}", callback_data=f'bcast_id_{user_id}')])
+
+    for group_id in list(groups):
+        try:
+            chat = await context.application.bot.get_chat(chat_id=group_id)
+            name = chat.title
+            keyboard.append([InlineKeyboardButton(f"👥 Group: {name} (ID: {group_id})", callback_data=f'bcast_id_{group_id}')])
+        except Exception:
+            keyboard.append([InlineKeyboardButton(f"👥 Group: {group_id}", callback_data=f'bcast_id_{group_id}')])
+
+    keyboard.append([InlineKeyboardButton("❌ Cancel Broadcast", callback_data='bcast_cancel')])
+
+    if len(keyboard) == 1 and keyboard[0][0].callback_data == 'bcast_cancel':
+        await update.message.reply_text("No tracked users or groups available for broadcast.")
+        return ConversationHandler.END
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Select the chat ID to broadcast to:", reply_markup=reply_markup)
+
+    return BROADCAST_SELECT_CHAT
+
+async def broadcast_select_target(update: Update, context: CallbackContext) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    target_id = query.data.split('_')[-1]
+    context.user_data['broadcast_target_id'] = target_id
+
+    try:
+        chat = await context.application.bot.get_chat(chat_id=target_id)
+        chat_name = chat.title or chat.full_name
+    except Exception:
+        chat_name = f"ID {target_id}"
+
+    await query.edit_message_text(
+        f"You selected **{chat_name}** (`{target_id}`).\n"
+        f"Please send the message you want to broadcast now:", 
+        parse_mode='Markdown'
+    )
+
+    return BROADCAST_AWAITING_MESSAGE
+
+async def broadcast_confirm_message(update: Update, context: CallbackContext) -> int:
+    message_to_send = update.message.text
+    target_id = context.user_data.get('broadcast_target_id')
+
+    if not target_id:
+        await update.message.reply_text("Error: Target ID lost. Starting over with /broadcast.")
+        return ConversationHandler.END
+
+    context.user_data['message_to_send'] = message_to_send
+
+    keyboard = [
+        [InlineKeyboardButton("✅ Confirm and Send", callback_data='bcast_confirm')],
+        [InlineKeyboardButton("❌ Cancel", callback_data='bcast_cancel')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    try:
+        chat = await context.application.bot.get_chat(chat_id=target_id)
+        chat_name = chat.title or chat.full_name
+    except Exception:
+        chat_name = f"ID {target_id}"
+
+    await update.message.reply_text(
+        f"You are about to send the following message to **{chat_name}** (`{target_id}`):\n\n"
+        f"--- MESSAGE PREVIEW ---\n"
+        f"{message_to_send}\n"
+        f"-----------------------\n\n"
+        f"Are you sure you want to send this?",
+        reply_to_message_id=update.message.message_id, 
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
+    return BROADCAST_CONFIRMATION
+
+async def execute_broadcast(update: Update, context: CallbackContext) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    target_id = context.user_data.pop('broadcast_target_id', None)
+    message_to_send = context.user_data.pop('message_to_send', None)
+
+    if not target_id or not message_to_send:
+        await query.edit_message_text("❌ Error: Message or target information lost. Broadcast cancelled.")
+        return ConversationHandler.END
+
+    try:
+        await context.application.bot.send_message(chat_id=target_id, text=f"[ADMIN BROADCAST]\n{message_to_send}")
+        await query.edit_message_text(f"✅ Message sent successfully to target ID `{target_id}`.")
+    except Exception as e:
+        await query.edit_message_text(f"❌ Failed to send message to target ID `{target_id}`. Error: {e}")
+
+    return ConversationHandler.END
+
+async def cancel_broadcast_action(update: Update, context: CallbackContext) -> int:
+    context.user_data.pop('broadcast_target_id', None)
+    context.user_data.pop('message_to_send', None)
+
+    if update.callback_query:
+        query = update.callback_query
+        await query.answer()
+        await query.edit_message_text("❌ Broadcast action cancelled.")
+    else:
+        await update.message.reply_text("❌ Broadcast action cancelled.")
+
+    return ConversationHandler.END
 
 async def list_groups(update: Update, context: CallbackContext) -> None:
     if update.effective_user.id != ADMIN_ID:
@@ -484,8 +613,8 @@ async def clear_group_data_callback(update: Update, context: CallbackContext) ->
 
     try:
         data_parts = query.data.split('_')
-        group_id_to_clear = int(data_parts[2])
-    except (IndexError, ValueError):
+        group_id_to_clear = data_parts[2]
+    except IndexError:
         await query.edit_message_text("❌ Error: Invalid clear command.")
         return
 
@@ -528,42 +657,10 @@ async def admin_settings_command(update: Update, context: CallbackContext) -> No
         f"Daily Separator Jobs: `REMOVED`\n"
         f"Actions:\n"
         f"• /stats (Admin only)\n"
-        f"• /broadcast <msg> (Admin only)\n"
+        f"• /broadcast (Admin only - New interactive system)\n"
         f"• /listgroups (Admin only - Selectively clear group data)",
         parse_mode='Markdown'
     )
-
-async def broadcast(update: Update, context: CallbackContext) -> None:
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("You are not authorized to use this command.")
-        return
-
-    if not context.args:
-        await update.message.reply_text("Usage: /broadcast <message>")
-        return
-
-    message_to_send = " ".join(context.args)
-
-    users = context.application.bot_data.get('users', set())
-    groups = context.application.bot_data.get('groups', set())
-
-    successful_sends = 0
-
-    for user_id in list(users):
-        try:
-            await context.application.bot.send_message(chat_id=user_id, text=f"[BROADCAST]\n{message_to_send}")
-            successful_sends += 1
-        except Exception:
-            pass
-
-    for group_id in list(groups):
-        try:
-            await context.application.bot.send_message(chat_id=group_id, text=f"[BROADCAST]\n{message_to_send}")
-            successful_sends += 1
-        except Exception:
-            pass
-
-    await update.message.reply_text(f"Broadcast sent successfully to {successful_sends} chats.")
 
 async def stats(update: Update, context: CallbackContext) -> None:
     if update.effective_user.id != ADMIN_ID:
@@ -581,36 +678,8 @@ async def stats(update: Update, context: CallbackContext) -> None:
         f"Total Unique Numbers Checked (/chk): {chk_count}"
     )
 
-async def set_webhook_on_startup():
-    global application
-    if application is None:
-        return 
-
-    await application.initialize()
-
-    if not TOKEN:
-        logger.error("TELEGRAM_BOT_TOKEN is not set.")
-        return
-
-    webhook_url = WEBHOOK_URL_BASE + WEBHOOK_PATH
-    current_webhook_info = await application.bot.get_webhook_info()
-    
-    if current_webhook_info.url != webhook_url:
-        logger.info(f"Setting webhook to: {webhook_url}")
-        await application.bot.set_webhook(url=webhook_url)
-    else:
-        logger.info("Webhook already set correctly.")
-        
-    logger.info("Bot application is ready for Flask/Gunicorn to handle webhooks.")
-
 def main():
-    global application
-    
-    if application is not None:
-        return 
-
     if not TOKEN:
-        logger.error("TELEGRAM_BOT_TOKEN is not set. Bot cannot initialize.")
         return
 
     persistence = PicklePersistence(filepath='bot_data.pickle')
@@ -621,7 +690,7 @@ def main():
         .persistence(persistence)
         .build()
     )
-    
+
     application.add_handler(CommandHandler("menu", main_menu_command))
     application.add_handler(CommandHandler("hidemenu", remove_menu))
     application.add_handler(CommandHandler("start", start))
@@ -629,18 +698,44 @@ def main():
     application.add_handler(CommandHandler("showdata", show_data))
     application.add_handler(CommandHandler("cleardata", clear_data))
     application.add_handler(CommandHandler("chk", check_command))
+
+    application.add_handler(CommandHandler("form", report_form_command))
+
     application.add_handler(CommandHandler("settings", admin_settings_command))
-    application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(CommandHandler("stats", stats))
+
     application.add_handler(CommandHandler("listgroups", list_groups))
-    application.add_handler(CallbackQueryHandler(clear_group_data_callback, pattern='^admin_clear_'))
+
+    application.add_handler(CallbackQueryHandler(clear_group_data_callback, pattern='^admin_clear_-'))
     application.add_handler(CallbackQueryHandler(cancel_group_action, pattern='^admin_cancel$'))
+
+    broadcast_handler = ConversationHandler(
+        entry_points=[CommandHandler("broadcast", broadcast_start_selection)],
+        states={
+            BROADCAST_SELECT_CHAT: [
+                CallbackQueryHandler(broadcast_select_target, pattern='^bcast_id_-?(\d+)$'),
+            ],
+            BROADCAST_AWAITING_MESSAGE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_confirm_message),
+            ],
+            BROADCAST_CONFIRMATION: [
+                CallbackQueryHandler(execute_broadcast, pattern='^bcast_confirm$'),
+                CallbackQueryHandler(cancel_broadcast_action, pattern='^bcast_cancel$'), 
+            ],
+        },
+        fallbacks=[
+            CallbackQueryHandler(cancel_broadcast_action, pattern='^bcast_cancel$'), 
+            CommandHandler('cancel', cancel_broadcast_action)
+        ],
+        allow_reentry=True
+    )
+    application.add_handler(broadcast_handler)
 
     comm_handler = ConversationHandler(
         entry_points=[CommandHandler("comm", commission_start)],
         states={
             COMMISSION_AMOUNT: [
-                CallbackQueryHandler(request_amount, pattern='^comm_(killer|deposit|m1)$'),
+                CallbackQueryHandler(request_amount, pattern='^comm_(killer|deposit|m1)$'), 
                 MessageHandler(filters.TEXT & ~filters.COMMAND, calculate_commission)
             ],
         },
@@ -663,27 +758,14 @@ def main():
     application.add_handler(feedback_handler)
 
     application.add_handler(MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.CAPTION, extract_and_save_data))
-    
-    application.add_error_handler(error_handler)
 
-    logger.info("Bot application handlers loaded.")
+    application.run_polling(poll_interval=1.0)
 
 if __name__ == '__main__':
-    main()
     try:
-        asyncio.run(set_webhook_on_startup())
-    except Exception as e:
-        logger.warning(f"Error setting webhook on startup: {e}")
-        
-    app.run(host='0.0.0.0', port=os.getenv('PORT', 5000))
+        from web_server import keep_alive
+        keep_alive()
+    except ImportError:
+        pass
 
-else:
     main()
-    try:
-        loop = asyncio.get_event_loop()
-        if not loop.is_running():
-             loop.run_until_complete(set_webhook_on_startup())
-        else:
-             asyncio.ensure_future(set_webhook_on_startup())
-    except Exception as e:
-        logger.warning(f"Error during async webhook setup in Gunicorn environment: {e}")
