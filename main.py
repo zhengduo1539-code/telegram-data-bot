@@ -28,30 +28,24 @@ ADMIN_ID = 7196380140
 
 COMMISSION_AMOUNT = 2
 FEEDBACK_AWAITING = 3
-BROADCAST_SELECT_CHAT, BROADCAST_AWAITING_MESSAGE, BROADCAST_CONFIRMATION = range(4, 7)
+BROADCAST_SELECT_CHAT = 10
+BROADCAST_AWAITING_MESSAGE = 11
+BROADCAST_CONFIRMATION = 12
 
 REPORT_TEMPLATE = (
-    "Gmail             - \n"
-
-    " \n"
-    "Tele name   - \n"
-
-    " \n"
-    "Username    - \n"
-
-    " \n"
-    "Date          - \n"
-
-    " \n"
-    "Age           - \n"
-
-    " \n"
-    "Current work  - \n"
-
-    " \n"
-    "Phone number    - \n"
-
-
+    "Gmail        - \n"
+    "  \n"
+    "Tele name    - \n"
+    "    \n"
+    "Username     - \n"
+    "    \n"
+    "Date         - \n"
+    "    \n"
+    "Age          - \n"
+    "    \n"
+    "Current work - \n"
+    "    \n"
+    "Phone number       - \n"
     "\n"
     "Khaifa - "
 )
@@ -101,9 +95,9 @@ async def help_command(update: Update, context: CallbackContext) -> None:
         'Bot commands and functions:\n\n'
         '**Data Entry:**\n'
         '1. Send a message containing "Khaifa -" and "Date -" to collect data automatically.\n'
-        ' \n'
+        '  **(ပုံ သို့မဟုတ် စာသားဖြင့် နံပါတ်တစ်ခုတည်း ပို့ပါက /chk အတိုင်း စစ်ဆေးပေးပါမည်။)**\n'
         '\n**User Commands (Menu Buttons):**\n'
-        '• /form - Display the report submission template\n' 
+        '• /form - Display the report submission template\n'
         '• /comm - Commission calculator\n'
         '• /chk <number> - Check and track number usage\n'
         '• /showdata - Show today\'s collected data\n'
@@ -131,6 +125,7 @@ async def main_menu_command(update: Update, context: CallbackContext) -> None:
         [KeyboardButton("/showdata"), KeyboardButton("/cleardata")],
         [KeyboardButton("/comm"), KeyboardButton("/feedback")],
         [KeyboardButton("/chk"), KeyboardButton("/form")],
+        [KeyboardButton("/stats"), KeyboardButton("/settings")],
         [KeyboardButton("/hidemenu")]
     ]
 
@@ -224,7 +219,7 @@ async def show_data(update: Update, context: CallbackContext) -> None:
     grouped_data = {}
 
     for entry in collected_data_list:
-        parts = [p.strip() for p in entry.split('     ')] 
+        parts = entry.split('    ')
 
         khaifa_name = "N/A"
         if len(parts) >= 2:
@@ -260,7 +255,8 @@ async def show_data(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text(response_text)
 
     await update.message.reply_text(
-        "💡 အသင်တောသား Data များကို ရှင်းလင်းလိုပါက **`/cleardata`** ကို နှိပ်ပါ သို့မဟုတ် **Menu Button** မှ ရွေးချယ်နိုင်ပါသည်",
+        "💡 အသင်တောသား Data များကို**`/cleardata`** ကို နှိပ်၍ရှင်းလင်းပါ သို့မဟုတ် **Menu Button** မှ ရွေးချယ်နိုင်ပါသည်:\n\n"
+        "**/showdata ထုတ်ယူပြီးပါက အချက်အလက်များမှန်ကန်မှု ရှိမရှိစစ်ပါ**",
         parse_mode='Markdown'
     )
 
@@ -279,10 +275,7 @@ async def extract_and_save_data(update: Update, context: CallbackContext) -> Non
     )
 
     if not required_fields_present:
-
-
         cleaned_text = re.sub(r'[\s\n\-\(\)\+]+', '', full_text).strip()
-
 
         if cleaned_text.isdigit() and len(cleaned_text) >= 7:
             check_number = cleaned_text
@@ -291,7 +284,6 @@ async def extract_and_save_data(update: Update, context: CallbackContext) -> Non
             current_count = records.get(check_number, 0)
             new_count = current_count + 1
             records[check_number] = new_count
-
 
             extra_message = "\n\n‼️ အသင်တောသား 🔍Search-barတွင် နံပါတ်ရိုက်ထည့်၍ ယခင်စစ်ဆေးထားသူအားမေးမြန်းနိုင်သည်။"
 
@@ -309,12 +301,8 @@ async def extract_and_save_data(update: Update, context: CallbackContext) -> Non
             if context.application.persistence:
                 await context.application.persistence.flush()
 
-
             return
-
-
         return
-
 
     khaifa_match = re.search(r"(?:Khaifa|Khat)\s*[\-\–]?\s*(.+?)(?:\r?\n|$)", full_text, re.IGNORECASE | re.DOTALL)
     extracted_khaifa = khaifa_match.group(1).strip() if khaifa_match else "N/A"
@@ -325,7 +313,7 @@ async def extract_and_save_data(update: Update, context: CallbackContext) -> Non
     email_phone_match = re.search(r"(?:Gmail|Email|Phone number|Phone)\s*[\-\–]?\s*(.+?)(?:\n|$)", full_text, re.IGNORECASE | re.DOTALL)
     extracted_email_phone = email_phone_match.group(1).strip() if email_phone_match else "N/A"
 
-    final_output = f"{extracted_date}     {extracted_khaifa}     {extracted_email_phone}"
+    final_output = f"{extracted_date}    {extracted_khaifa}    {extracted_email_phone}"
 
     today_key = get_data_key()
 
@@ -414,9 +402,7 @@ async def cancel_commission(update: Update, context: CallbackContext) -> int:
     return ConversationHandler.END
 
 async def start_feedback(update: Update, context: CallbackContext) -> int:
-    await update.message.reply_text(
-        "သင်သည် Owner အားယခု စာပေးပို့နိုင်ပါသည်။ဤနေရာတွင်ကြိုက်နှစ်သက်ရာ စာကိုပေးပို့လိုက်ပါက Owner ဆီစာရောက်ရှိမည်ဖြစ်သည်။"
-    )
+    await update.message.reply_text("သင်သည် Owner အားယခု စာပေးပို့နိုင်ပါသည်။ဤနေရာတွင်ကြိုက်နှစ်သက်ရာ စာကိုပေးပို့လိုက်ပါက Owner ဆီစာရောက်ရှိမည်ဖြစ်သည်။\n\n(လုပ်ငန်းစဉ် ရပ်ဆိုင်းလိုပါက /cancel ကို သုံးပါ။)")
     return FEEDBACK_AWAITING
 
 async def process_feedback(update: Update, context: CallbackContext) -> int:
@@ -435,136 +421,130 @@ async def cancel_conversation(update: Update, context: CallbackContext) -> int:
     await update.message.reply_text('❌ Action cancelled.')
     return ConversationHandler.END
 
-async def set_separator_command(update: Update, context: CallbackContext) -> None:
+async def broadcast_start(update: Update, context: CallbackContext) -> int:
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("Admin only.")
-        return
-    await update.message.reply_text("`Daily Separator` functions have been removed from the code.")
-
-async def broadcast_start_selection(update: Update, context: CallbackContext) -> int:
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("You are not authorized to use this command.")
         return ConversationHandler.END
 
     users = context.application.bot_data.get('users', set())
     groups = context.application.bot_data.get('groups', set())
 
+    if not users and not groups:
+        await update.message.reply_text("No tracked users or groups found.")
+        return ConversationHandler.END
+
     keyboard = []
 
-    for user_id in list(users):
+    for user_id in sorted(list(users)):
         try:
-            chat = await context.application.bot.get_chat(chat_id=user_id)
-            name = chat.full_name
+            user = await context.application.bot.get_chat(chat_id=user_id)
+            name = user.full_name or f"User {user_id}"
             keyboard.append([InlineKeyboardButton(f"👤 User: {name} (ID: {user_id})", callback_data=f'bcast_id_{user_id}')])
         except Exception:
-            keyboard.append([InlineKeyboardButton(f"👤 User: {user_id}", callback_data=f'bcast_id_{user_id}')])
+            keyboard.append([InlineKeyboardButton(f"👤 Untracked User (ID: {user_id})", callback_data=f'bcast_id_{user_id}')])
 
-    for group_id in list(groups):
+    for group_id in sorted(list(groups)):
         try:
             chat = await context.application.bot.get_chat(chat_id=group_id)
-            name = chat.title
+            name = chat.title or f"Group {group_id}"
             keyboard.append([InlineKeyboardButton(f"👥 Group: {name} (ID: {group_id})", callback_data=f'bcast_id_{group_id}')])
         except Exception:
-            keyboard.append([InlineKeyboardButton(f"👥 Group: {group_id}", callback_data=f'bcast_id_{group_id}')])
+            keyboard.append([InlineKeyboardButton(f"👥 Untracked Group (ID: {group_id})", callback_data=f'bcast_id_{group_id}')])
 
     keyboard.append([InlineKeyboardButton("❌ Cancel Broadcast", callback_data='bcast_cancel')])
-
-    if len(keyboard) == 1 and keyboard[0][0].callback_data == 'bcast_cancel':
-        await update.message.reply_text("No tracked users or groups available for broadcast.")
-        return ConversationHandler.END
-
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Select the chat ID to broadcast to:", reply_markup=reply_markup)
-
-    return BROADCAST_SELECT_CHAT
-
-async def broadcast_select_target(update: Update, context: CallbackContext) -> int:
-    query = update.callback_query
-    await query.answer()
-
-    target_id = query.data.split('_')[-1]
-    context.user_data['broadcast_target_id'] = target_id
-
-    try:
-        chat = await context.application.bot.get_chat(chat_id=target_id)
-        chat_name = chat.title or chat.full_name
-    except Exception:
-        chat_name = f"ID {target_id}"
-
-    await query.edit_message_text(
-        f"You selected **{chat_name}** (`{target_id}`).\n"
-        f"Please send the message you want to broadcast now:", 
-        parse_mode='Markdown'
-    )
-
-    return BROADCAST_AWAITING_MESSAGE
-
-async def broadcast_confirm_message(update: Update, context: CallbackContext) -> int:
-    message_to_send = update.message.text
-    target_id = context.user_data.get('broadcast_target_id')
-
-    if not target_id:
-        await update.message.reply_text("Error: Target ID lost. Starting over with /broadcast.")
-        return ConversationHandler.END
-
-    context.user_data['message_to_send'] = message_to_send
-
-    keyboard = [
-        [InlineKeyboardButton("✅ Confirm and Send", callback_data='bcast_confirm')],
-        [InlineKeyboardButton("❌ Cancel", callback_data='bcast_cancel')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    try:
-        chat = await context.application.bot.get_chat(chat_id=target_id)
-        chat_name = chat.title or chat.full_name
-    except Exception:
-        chat_name = f"ID {target_id}"
 
     await update.message.reply_text(
-        f"You are about to send the following message to **{chat_name}** (`{target_id}`):\n\n"
-        f"--- MESSAGE PREVIEW ---\n"
-        f"{message_to_send}\n"
-        f"-----------------------\n\n"
-        f"Are you sure you want to send this?",
-        reply_to_message_id=update.message.message_id, 
+        "**📢 Broadcast Service**\n\n"
+        "ကျေးဇူးပြု၍ စာပေးပို့လိုသည့် User (သို့) Group ကို ရွေးချယ်ပါ:",
         reply_markup=reply_markup,
         parse_mode='Markdown'
     )
+    return BROADCAST_SELECT_CHAT
 
-    return BROADCAST_CONFIRMATION
-
-async def execute_broadcast(update: Update, context: CallbackContext) -> int:
+async def broadcast_select_chat(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     await query.answer()
 
-    target_id = context.user_data.pop('broadcast_target_id', None)
-    message_to_send = context.user_data.pop('message_to_send', None)
+    if not query.data.startswith('bcast_id_'):
+        await query.edit_message_text("❌ ရွေးချယ်မှု မှားယွင်းပါသည်။")
+        return ConversationHandler.END
 
-    if not target_id or not message_to_send:
-        await query.edit_message_text("❌ Error: Message or target information lost. Broadcast cancelled.")
+    target_id_str = query.data.split('_')[-1]
+
+    context.user_data['target_broadcast_id'] = target_id_str
+
+    try:
+        chat = await context.application.bot.get_chat(chat_id=target_id_str)
+        name = chat.title or chat.full_name
+        context.user_data['target_name'] = name
+    except Exception:
+        context.user_data['target_name'] = f"Chat ID: {target_id_str}"
+
+    await query.edit_message_text(
+        f"✅ **{context.user_data['target_name']}** သို့ စာပေးပို့ရန် ရွေးချယ်ပြီးပါပြီ။\n\n"
+        "ကျေးဇူးပြု၍ **သင်ပေးပို့လိုသည့် စာသား** ကို ရိုက်ထည့်ပေးပါ။\n(ရပ်လိုပါက /cancel)"
+    )
+    return BROADCAST_AWAITING_MESSAGE
+
+async def broadcast_await_message(update: Update, context: CallbackContext) -> int:
+    message_to_send = update.message.text
+    context.user_data['broadcast_message'] = message_to_send
+    target_name = context.user_data.get('target_name', 'ရွေးချယ်ထားသော Chat')
+
+    keyboard = [
+        [InlineKeyboardButton("✅ Confirm Send", callback_data='bcast_confirm')],
+        [InlineKeyboardButton("❌ Cancel Broadcast", callback_data='bcast_cancel')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        f"**👉 {target_name}** သို့ အောက်ပါစာကို ပေးပို့ရန် သေချာပါသလား?\n\n"
+        f"**ပေးပို့မည့်စာ:**\n---\n{message_to_send}\n---\n",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+    return BROADCAST_CONFIRMATION
+
+async def broadcast_confirm(update: Update, context: CallbackContext) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    target_id = context.user_data.pop('target_broadcast_id', None)
+    message = context.user_data.pop('broadcast_message', None)
+    target_name = context.user_data.pop('target_name', 'Unknown Chat')
+
+    if not target_id or not message:
+        await query.edit_message_text("❌ အချက်အလက်မပြည့်စုံ၍ ပေးပို့နိုင်ခြင်းမရှိပါ။")
         return ConversationHandler.END
 
     try:
-        await context.application.bot.send_message(chat_id=target_id, text=f"[ADMIN BROADCAST]\n{message_to_send}")
-        await query.edit_message_text(f"✅ Message sent successfully to target ID `{target_id}`.")
+        await context.application.bot.send_message(chat_id=target_id, text=f"[ADMIN MESSAGE]\n{message}")
+        await query.edit_message_text(f"✅ **{target_name}** ထံသို့ စာကို အောင်မြင်စွာ ပေးပို့ပြီးပါပြီ။", parse_mode='Markdown')
     except Exception as e:
-        await query.edit_message_text(f"❌ Failed to send message to target ID `{target_id}`. Error: {e}")
+        await query.edit_message_text(f"❌ **{target_name}** ထံသို့ စာပေးပို့ရာတွင် အမှားဖြစ်ပွားပါသည်။ (Error: {e})")
 
     return ConversationHandler.END
 
-async def cancel_broadcast_action(update: Update, context: CallbackContext) -> int:
-    context.user_data.pop('broadcast_target_id', None)
-    context.user_data.pop('message_to_send', None)
-
+async def broadcast_cancel(update: Update, context: CallbackContext) -> int:
     if update.callback_query:
         query = update.callback_query
         await query.answer()
-        await query.edit_message_text("❌ Broadcast action cancelled.")
-    else:
-        await update.message.reply_text("❌ Broadcast action cancelled.")
+        await query.edit_message_text("❌ Broadcast လုပ်ငန်းစဉ်ကို ဖျက်သိမ်းလိုက်ပါသည်။")
+    elif update.message:
+        await update.message.reply_text('❌ Broadcast လုပ်ငန်းစဉ်ကို ဖျက်သိမ်းလိုက်ပါသည်။')
+
+    context.user_data.pop('target_broadcast_id', None)
+    context.user_data.pop('broadcast_message', None)
+    context.user_data.pop('target_name', None)
 
     return ConversationHandler.END
+
+async def set_separator_command(update: Update, context: CallbackContext) -> None:
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("Admin only.")
+        return
+    await update.message.reply_text("`Daily Separator` functions have been removed from the code.")
 
 async def list_groups(update: Update, context: CallbackContext) -> None:
     if update.effective_user.id != ADMIN_ID:
@@ -657,7 +637,7 @@ async def admin_settings_command(update: Update, context: CallbackContext) -> No
         f"Daily Separator Jobs: `REMOVED`\n"
         f"Actions:\n"
         f"• /stats (Admin only)\n"
-        f"• /broadcast (Admin only - New interactive system)\n"
+        f"• /broadcast (Admin only - Selectively broadcast)\n"
         f"• /listgroups (Admin only - Selectively clear group data)",
         parse_mode='Markdown'
     )
@@ -698,44 +678,18 @@ def main():
     application.add_handler(CommandHandler("showdata", show_data))
     application.add_handler(CommandHandler("cleardata", clear_data))
     application.add_handler(CommandHandler("chk", check_command))
-
     application.add_handler(CommandHandler("form", report_form_command))
-
     application.add_handler(CommandHandler("settings", admin_settings_command))
     application.add_handler(CommandHandler("stats", stats))
-
     application.add_handler(CommandHandler("listgroups", list_groups))
-
     application.add_handler(CallbackQueryHandler(clear_group_data_callback, pattern='^admin_clear_-'))
     application.add_handler(CallbackQueryHandler(cancel_group_action, pattern='^admin_cancel$'))
-
-    broadcast_handler = ConversationHandler(
-        entry_points=[CommandHandler("broadcast", broadcast_start_selection)],
-        states={
-            BROADCAST_SELECT_CHAT: [
-                CallbackQueryHandler(broadcast_select_target, pattern='^bcast_id_-?(\d+)$'),
-            ],
-            BROADCAST_AWAITING_MESSAGE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_confirm_message),
-            ],
-            BROADCAST_CONFIRMATION: [
-                CallbackQueryHandler(execute_broadcast, pattern='^bcast_confirm$'),
-                CallbackQueryHandler(cancel_broadcast_action, pattern='^bcast_cancel$'), 
-            ],
-        },
-        fallbacks=[
-            CallbackQueryHandler(cancel_broadcast_action, pattern='^bcast_cancel$'), 
-            CommandHandler('cancel', cancel_broadcast_action)
-        ],
-        allow_reentry=True
-    )
-    application.add_handler(broadcast_handler)
 
     comm_handler = ConversationHandler(
         entry_points=[CommandHandler("comm", commission_start)],
         states={
             COMMISSION_AMOUNT: [
-                CallbackQueryHandler(request_amount, pattern='^comm_(killer|deposit|m1)$'), 
+                CallbackQueryHandler(request_amount, pattern='^comm_(killer|deposit|m1)$'),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, calculate_commission)
             ],
         },
@@ -757,15 +711,24 @@ def main():
     )
     application.add_handler(feedback_handler)
 
+    broadcast_handler = ConversationHandler(
+        entry_points=[CommandHandler("broadcast", broadcast_start, filters=filters.User(ADMIN_ID))],
+        states={
+            BROADCAST_SELECT_CHAT: [CallbackQueryHandler(broadcast_select_chat, pattern='^bcast_id_')],
+            BROADCAST_AWAITING_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_await_message)],
+            BROADCAST_CONFIRMATION: [CallbackQueryHandler(broadcast_confirm, pattern='^bcast_confirm$')]
+        },
+        fallbacks=[
+            CallbackQueryHandler(broadcast_cancel, pattern='^bcast_cancel$'),
+            CommandHandler('cancel', cancel_conversation)
+        ],
+        allow_reentry=True
+    )
+    application.add_handler(broadcast_handler)
+
     application.add_handler(MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.CAPTION, extract_and_save_data))
 
     application.run_polling(poll_interval=1.0)
 
 if __name__ == '__main__':
-    try:
-        from web_server import keep_alive
-        keep_alive()
-    except ImportError:
-        pass
-
     main()
