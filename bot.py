@@ -14,6 +14,7 @@ from datetime import datetime, time, timedelta
 import re
 import pytz
 import logging
+from flask import Flask, request, jsonify
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -658,19 +659,7 @@ async def stats(update: Update, context: CallbackContext) -> None:
         f"Total Unique Numbers Checked (/chk): {chk_count}"
     )
 
-def main():
-    if not TOKEN:
-        return
-
-    persistence = PicklePersistence(filepath='bot_data.pickle')
-
-    application = (
-        Application.builder()
-        .token(TOKEN)
-        .persistence(persistence)
-        .build()
-    )
-
+def add_handlers(application: Application):
     application.add_handler(CommandHandler("menu", main_menu_command))
     application.add_handler(CommandHandler("hidemenu", remove_menu))
     application.add_handler(CommandHandler("start", start))
@@ -728,7 +717,48 @@ def main():
 
     application.add_handler(MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.CAPTION, extract_and_save_data))
 
-    application.run_polling(poll_interval=1.0)
 
-if __name__ == '__main__':
-    main()
+if not TOKEN:
+    print("Error: TELEGRAM_BOT_TOKEN environment variable is not set.")
+    exit(1)
+
+# Initialize PTB Application globally
+persistence = PicklePersistence(filepath='bot_data.pickle')
+application = Application.builder().token(TOKEN).persistence(persistence).build()
+
+# Add handlers to the application object
+add_handlers(application)
+
+# Initialize Flask App (what gunicorn looks for)
+app = Flask(__name__)
+
+# Webhook constants
+WEBHOOK_URL_PATH = "/webhook"
+
+# ------------------------------------------------
+# Flask Routes for Webhook Handling
+# ------------------------------------------------
+
+@app.route(WEBHOOK_URL_PATH, methods=['POST'])
+async def webhook_handler():
+    if request.method == "POST":
+        update_json = request.get_json()
+        if update_json:
+            update = Update.de_json(update_json, application.bot)
+            await application.process_update(update)
+            return jsonify({"status": "ok"}), 200
+    return jsonify({"status": "Bad Request"}), 400
+
+@app.route("/", methods=['GET'])
+async def set_webhook_and_index():
+    external_url = os.environ.get('RENDER_EXTERNAL_URL')
+
+    if external_url:
+        webhook_url = f"{external_url.strip('/')}{WEBHOOK_URL_PATH}"
+        try:
+            await application.bot.set_webhook(url=webhook_url)
+            return f"Telegram Bot is running via Webhook mode. Webhook set to: {webhook_url}", 200
+        except Exception as e:
+            return f"Telegram Bot is running, but failed to set webhook. Check RENDER_EXTERNAL_URL. Error: {e}", 500
+
+    return "Telegram Bot is running. Please ensure RENDER_EXTERNAL_URL is set for webhook mode.", 200
