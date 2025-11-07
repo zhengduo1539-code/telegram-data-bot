@@ -722,22 +722,15 @@ if not TOKEN:
     print("Error: TELEGRAM_BOT_TOKEN environment variable is not set.")
     exit(1)
 
-# Initialize PTB Application globally
 persistence = PicklePersistence(filepath='bot_data.pickle')
 application = Application.builder().token(TOKEN).persistence(persistence).build()
 
-# Add handlers to the application object
 add_handlers(application)
 
-# Initialize Flask App (what gunicorn looks for)
 app = Flask(__name__)
 
-# Webhook constants
 WEBHOOK_URL_PATH = "/webhook"
 
-# ------------------------------------------------
-# Flask Routes for Webhook Handling
-# ------------------------------------------------
 
 @app.route(WEBHOOK_URL_PATH, methods=['POST'])
 async def webhook_handler():
