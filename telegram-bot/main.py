@@ -491,7 +491,6 @@ async def main_menu_command(update: Update, context: CallbackContext) -> None:
         [KeyboardButton("/feedback"), KeyboardButton("/form")],
         [KeyboardButton("/total_plus"), KeyboardButton("/reset_plus")],
         [KeyboardButton("/guide"), KeyboardButton("/hidemenu")],
-        [KeyboardButton("Set Schedule"), KeyboardButton("/listschedules")],
     ]
 
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
@@ -507,12 +506,6 @@ async def main_menu_command(update: Update, context: CallbackContext) -> None:
         "Bot အသုံးပြုနည်းသိအောင် /guide 📝 ကိုနှိပ်၍ကြည့်နိုင်ပါသည်။📌\n\n"
         "🧮 Bot PM တွင် math expression ရိုက်ပါ (e.g. 2+2)",
         reply_markup=inline_kb
-    )
-    # Telegram supports either an inline keyboard or a reply keyboard per message,
-    # so send the reply keyboard in its own message.
-    await update.message.reply_text(
-        "⌨️ Menu မှ လုပ်ဆောင်ချက်ကို ရွေးပါ:",
-        reply_markup=reply_markup
     )
 
 async def remove_menu(update: Update, context: CallbackContext) -> None:
@@ -1976,7 +1969,6 @@ async def post_init(application: Application) -> None:
         BotCommand("stats",          "Bot stats (Admin)"),
         BotCommand("listusers",      "User list (Admin)"),
         BotCommand("listgroups",     "Group list (Admin)"),
-        BotCommand("setschedule",    "Set a scheduled message"),
         BotCommand("listschedules",  "Schedule list"),
         BotCommand("admin",          "Admin panel (Admin)"),
         BotCommand("clearall",       "Data အားလုံး ရှင်း (Admin PM)"),
@@ -2080,13 +2072,7 @@ def main():
     application.add_handler(CallbackQueryHandler(admin_panel_callback, pattern='^adm_'))
 
     schedule_handler = ConversationHandler(
-        entry_points=[
-            CommandHandler("setschedule", setschedule_command),
-            MessageHandler(
-                filters.Regex(r"(?i)^(?:set\s+)?schedule$") & filters.ChatType.PRIVATE,
-                setschedule_command,
-            ),
-        ],
+        entry_points=[CommandHandler("setschedule", setschedule_command)],
         states={
             SCHEDULE_SET_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, schedule_set_time)],
             SCHEDULE_SET_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, schedule_set_message)],
