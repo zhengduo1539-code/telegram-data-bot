@@ -491,6 +491,7 @@ async def main_menu_command(update: Update, context: CallbackContext) -> None:
         [KeyboardButton("/feedback"), KeyboardButton("/form")],
         [KeyboardButton("/total_plus"), KeyboardButton("/reset_plus")],
         [KeyboardButton("/guide"), KeyboardButton("/hidemenu")],
+        [KeyboardButton("Set Schedule"), KeyboardButton("/listschedules")],
     ]
 
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
@@ -506,6 +507,12 @@ async def main_menu_command(update: Update, context: CallbackContext) -> None:
         "Bot အသုံးပြုနည်းသိအောင် /guide 📝 ကိုနှိပ်၍ကြည့်နိုင်ပါသည်။📌\n\n"
         "🧮 Bot PM တွင် math expression ရိုက်ပါ (e.g. 2+2)",
         reply_markup=inline_kb
+    )
+    # Telegram supports either an inline keyboard or a reply keyboard per message,
+    # so send the reply keyboard in its own message.
+    await update.message.reply_text(
+        "⌨️ Menu မှ လုပ်ဆောင်ချက်ကို ရွေးပါ:",
+        reply_markup=reply_markup
     )
 
 async def remove_menu(update: Update, context: CallbackContext) -> None:
@@ -1501,6 +1508,7 @@ async def setschedule_command(update: Update, context: CallbackContext) -> int:
 
 
 async def schedule_set_time(update: Update, context: CallbackContext) -> int:
+    logging.info("Schedule time input received from user_id=%s", update.effective_user.id if update.effective_user else "unknown")
     m = re.match(r'^(\d{1,2}):(\d{2})$', update.message.text.strip())
     if not m:
         await update.message.reply_text("❌ HH:MM ပုံစံ မမှန်ပါ (ဥပမာ: 09:30)")
@@ -1968,6 +1976,7 @@ async def post_init(application: Application) -> None:
         BotCommand("stats",          "Bot stats (Admin)"),
         BotCommand("listusers",      "User list (Admin)"),
         BotCommand("listgroups",     "Group list (Admin)"),
+        BotCommand("setschedule",    "Set a scheduled message"),
         BotCommand("listschedules",  "Schedule list"),
         BotCommand("admin",          "Admin panel (Admin)"),
         BotCommand("clearall",       "Data အားလုံး ရှင်း (Admin PM)"),
@@ -2070,6 +2079,28 @@ def main():
     application.add_handler(CallbackQueryHandler(adminall_callback, pattern=r'^adminall_'))
     application.add_handler(CallbackQueryHandler(admin_panel_callback, pattern='^adm_'))
 
+    schedule_handler = ConversationHandler(
+        entry_points=[
+            CommandHandler("setschedule", setschedule_command),
+            MessageHandler(
+                filters.Regex(r"(?i)^(?:set\s+)?schedule$") & filters.ChatType.PRIVATE,
+                setschedule_command,
+            ),
+        ],
+        states={
+            SCHEDULE_SET_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, schedule_set_time)],
+            SCHEDULE_SET_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, schedule_set_message)],
+            SCHEDULE_SELECT_TYPE: [CallbackQueryHandler(schedule_select_type, pattern='^sched_type_|^sched_cancel$')],
+            SCHEDULE_SELECT_GROUP: [CallbackQueryHandler(schedule_select_group, pattern='^sched_grp_|^sched_cancel$')],
+        },
+        fallbacks=[
+            CallbackQueryHandler(schedule_cancel, pattern='^sched_cancel$'),
+            CommandHandler('cancel', cancel_conversation)
+        ],
+        allow_reentry=True
+    )
+    application.add_handler(schedule_handler)
+
     bot_settings_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(bot_settings_menu, pattern='^adm_botsettings$')],
         states={
@@ -2117,21 +2148,6 @@ def main():
     )
     application.add_handler(broadcast_handler)
 
-    schedule_handler = ConversationHandler(
-        entry_points=[CommandHandler("setschedule", setschedule_command)],
-        states={
-            SCHEDULE_SET_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, schedule_set_time)],
-            SCHEDULE_SET_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, schedule_set_message)],
-            SCHEDULE_SELECT_TYPE: [CallbackQueryHandler(schedule_select_type, pattern='^sched_type_|^sched_cancel$')],
-            SCHEDULE_SELECT_GROUP: [CallbackQueryHandler(schedule_select_group, pattern='^sched_grp_|^sched_cancel$')],
-        },
-        fallbacks=[
-            CallbackQueryHandler(schedule_cancel, pattern='^sched_cancel$'),
-            CommandHandler('cancel', cancel_conversation)
-        ],
-        allow_reentry=True
-    )
-    application.add_handler(schedule_handler)
 
     application.add_handler(MessageHandler(filters.REPLY & filters.Regex(r'^\+$'), handle_plus_reply))
     application.add_handler(MessageHandler(filters.REPLY & filters.Regex(r'^\-$'), handle_minus_reply))
